@@ -1,11 +1,10 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-29 (v0.2.0, dev2).
+Last updated: 2026-09-29 (v0.3.0, dev3).
 
-> **dev3 (v0.3.0) is in progress on branch `feat/dev3`** (stages 0–10 done 2026-09-29, stage 11 device
-> test + release pending). The full plan, specs and the live status table
-> are in [`docs/DEV3.md`](docs/DEV3.md). If the owner says «أكمل dev3» ("continue dev3"), follow that file:
-> take the first stage that is not ✅ and finish it.
+> **dev3 (v0.3.0) was released 2026-09-29 from branch `feat/dev3`** (GitHub release v0.3.0). Plan, specs,
+> measurements and the remaining open items (Vulkan A/B, scenarios 2–4 on device, gc0 on IL2CPP) are in
+> [`docs/DEV3.md`](docs/DEV3.md) (§3 row 11). If the owner says «أكمل dev3», finish those open items.
 
 ## 1. Goal and status
 
@@ -41,6 +40,11 @@ v0.1.0 checkpoint:
     Haptic pulses=58.
   - Scenario 2: `avg_fps=118.0`. Continue OK. E1M1, E2M1, E3M1 and E4M1 all load, with the Arabic UI.
 - **Not verified on hardware:** gyro direction (Test Lab devices are static) and audio.
+
+- v0.3.0 (dev3), branch `feat/dev3`: bug fixes (E1M7 save overflow, see-through wall columns), GRAPHICS tab with
+  Classic/Balanced/Enhanced presets, 400–1000 lines + dynres, 4 render threads, true-colour smooth lighting, bloom/grade/
+  sharpen/vignette/CRT, side-fill, per-frame look. APK 99,819,729 B, versionCode 3, GLES3. Test Lab r8q/33 scenario 1:
+  Passed, 0 `E Unity`, avg 109.4 fps, p99 16.7 ms (Enhanced; dynres settled at 400 lines). Details: `docs/DEV3.md`.
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
