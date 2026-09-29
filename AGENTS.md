@@ -1,10 +1,11 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-29 (v0.3.0, dev3).
+Last updated: 2026-09-29 (v0.4.0, dev4).
 
-> **dev3 (v0.3.0) was released 2026-09-29 from branch `feat/dev3`** (GitHub release v0.3.0). Plan, specs,
-> measurements and the remaining open items (Vulkan A/B, scenarios 2–4 on device, gc0 on IL2CPP) are in
-> [`docs/DEV3.md`](docs/DEV3.md) (§3 row 11). If the owner says «أكمل dev3», finish those open items.
+> **dev4 (v0.4.0) was released 2026-09-29 from branch `feat/dev4`** (GitHub release v0.4.0): free look, jump,
+> fixed joystick, crosshair, carved-stone UI with the WAD pixel font. Plan, specs, measurements and what is deferred
+> to dev5 are in [`docs/DEV4.md`](docs/DEV4.md). dev3 history: [`docs/DEV3.md`](docs/DEV3.md). If the owner says
+> «أكمل dev4», check §3 of DEV4.md for any unfinished row.
 
 ## 1. Goal and status
 
@@ -45,6 +46,10 @@ v0.1.0 checkpoint:
   Classic/Balanced/Enhanced presets, 400–1000 lines + dynres, 4 render threads, true-colour smooth lighting, bloom/grade/
   sharpen/vignette/CRT, side-fill, per-frame look. APK 99,819,729 B, versionCode 3, GLES3. Test Lab r8q/33 scenario 1:
   Passed, 0 `E Unity`, avg 109.4 fps, p99 16.7 ms (Enhanced; dynres settled at 400 lines). Details: `docs/DEV3.md`.
+- v0.4.0 (dev4), branch `feat/dev4`: free look (y-shear renderer, pitch aim, swipe/gyro), JUMP button, fixed joystick
+  (dead zone + curve, floating option), `+` crosshair, carved-stone skin + WAD STCFN pixel font, direct menu taps, Enhanced
+  = 600 lines. APK 99,836,563 B, versionCode 4. Test Lab r8q/33 scenarios 1+2: Passed, 0 `E Unity`, S1 avg 109.2 fps
+  p99 17.0 ms, S2 (Arabic) E1–E4 load, avg 95.2 fps. Details: `docs/DEV4.md`.
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
@@ -144,6 +149,7 @@ dev2 did the soundfont, widescreen, button editor, haptics and quick save.
   - An in-game localized Doom menu. The WAD graphics stay English, so it would need a custom overlay.
   - Controller button remapping UI.
   - Cloud or exported saves.
-  - A human playtest on a POCO F3, including gyro direction and audio.
+  - A human playtest on a POCO F3, including gyro direction (yaw and the new pitch) and audio.
+  - dev5 candidates: automap touch pan/zoom, weapon wheel, fewer gen0 GCs on IL2CPP.
 - Test scenarios: `REKKR_SCENARIO=1` (play + saves + haptics), `2` (Continue + E1–E4 + Arabic).
   `ftl_gameloop.sh` runs both by default (`SCENARIOS=1,2`, `FTL_TIMEOUT=12m`).

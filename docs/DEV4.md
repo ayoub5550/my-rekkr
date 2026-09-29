@@ -58,7 +58,7 @@ classic-style buttons + settings (not "dead brown"), a more fixed joystick, a `+
 | 4 | Crosshair `+` (styles, colours, size) | ✅ 2026-09-29 | `+` bone (default) / red / green, dot, off; centre of the 3D view window (`Renderer.ViewWindow`), 1 px dark outline, size ∝ screen height. Hidden in menus, automap, title, death |
 | 5 | Classic REKKR UI skin: stone buttons, carved-stone settings panel, WAD pixel font | ✅ 2026-09-29 | `tools/make_ui_textures.py` (procedural stone, numpy) → btn/btn_pressed (red ember), stick base/knob, 9-slice `panel`/`plate`/`plate_on`; icons without baked labels (Arabic icon variants deleted). `RekkrSkin.cs` reads STCFN033–095 from the WAD at runtime → 4 tinted point-filtered atlases (bone/red/dim/dark); Arabic/non-ASCII → Noto Arabic TTF with outline. Settings panel widened to 80 % width; Controls tab has 2 pages. EN + AR screenshots checked on the Linux player |
 | 6 | Extras the owner did not name (see spec) | ✅ 2026-09-29 (partial) | Done: tap Doom menu lines directly (`Select(i)` on Selectable/Load/Save menus, sliders only select), Enhanced = 600 lines + one-time migration of 0.3.0 Enhanced/800, double-tap look area centres the view, jump haptic. **Deferred to dev5:** automap touch pan/zoom, weapon wheel |
-| 7 | Build v0.4.0, local QA, Test Lab r8q, video, release (byte-verified), report | ⬜ | |
+| 7 | Build v0.4.0, local QA, Test Lab r8q, video, release (byte-verified), report | ✅ 2026-09-29 | APK 99,836,563 B, sha256 `8247ef00…4f03c90`, versionCode 4, GLES3, same cert. Test Lab r8q/33 scenarios 1+2: **Passed**, 0 ` E Unity`, 0 FATAL. S1: avg 109.2 fps, p50 8.5 ms, p99 17.0 ms, menu taps True, look up pitch 76 / down −74, jumps=6, quicksave/quickload OK, haptic pulses 63, gc0=202 (IL2CPP, 4 min). S2 (Arabic UI): Continue OK, E1M1–E4M1 load, avg 95.2 fps, p99 17.0 ms, thermal 4. Video frames reviewed. GitHub release **v0.4.0** (target `feat/dev4`), asset downloaded back: `sha256sum -c` OK + `cmp` identical |
 
 Legend: ⬜ not started · 🚧 in progress (see Next:) · ✅ done · ⏭ deferred (reason).
 
@@ -163,4 +163,5 @@ Anything not finished here is moved to "Deferred to dev5" with a reason.
 |---|---|---|
 
 ## 7. Log of decisions
+- 2026-09-29: dev4 done and released as v0.4.0. Open for dev5: automap touch pan/zoom, weapon wheel, gyro pitch direction + audio on a real phone, gc0 on IL2CPP (202 in scenario 1), merge `feat/dev4` → `main` only with the owner's OK.
 - 2026-09-29: jump on by default (owner asked); pitch/jump in new TicCmd fields so demos stay vanilla.
