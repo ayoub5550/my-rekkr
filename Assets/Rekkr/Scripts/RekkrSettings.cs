@@ -25,7 +25,7 @@ namespace ManagedDoom.UnityPort
         public static bool SmoothLook = true;    // dev3: touch/gyro look applied every frame
         public static bool StablePerf;           // dev3: Android sustained performance mode
         public static int RenderThreads;         // dev3: 0 = auto (min(4, cores-1)), 1 = original single thread
-        public static int Resolution = 800;      // dev3: max frame lines 400/600/800/1000 (400 = v0.2.0)
+        public static int Resolution = 600;      // dev4 (was 800); dev3: max frame lines 400/600/800/1000 (400 = v0.2.0)
         public static bool DynamicRes = true;    // dev3: drop/raise lines to hold the frame rate
         public static bool SmoothLighting = true; // dev3: true-colour light gradients (no 32-step bands)
         public static int Bloom = 1;             // dev3 post: 0 off, 1 low, 2 medium, 3 high
@@ -35,6 +35,13 @@ namespace ManagedDoom.UnityPort
         public static bool Crt;                  // dev3 post: CRT scanlines
         public static bool SideFill = true;      // dev3: blurred sides on centred 4:3 screens
         public static readonly int[] Resolutions = { 400, 600, 800, 1000 };
+        public static bool FreeLook = true;      // dev4: look up/down (y-shearing)
+        public static bool InvertLook;           // dev4: invert vertical swipe
+        public static bool AutoAim = true;       // dev4: vanilla vertical autoaim (off = shots follow the crosshair)
+        public static bool Jump = true;          // dev4: jump button (not in vanilla Doom)
+        public static int StickMode;             // dev4: 0 fixed, 1 floating
+        public static int Crosshair;             // dev4: 0 + bone, 1 + red, 2 + green, 3 dot, 4 off
+        public const int CrosshairStyles = 5;
         public static int GfxPreset = 2;         // dev3: 0 Classic, 1 Balanced, 2 Enhanced, 3 Custom
 
         // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads
@@ -42,7 +49,7 @@ namespace ManagedDoom.UnityPort
         {
             (400, false, false, 0, 0, 0, false, false, false, 1),   // Classic: pixel-identical to v0.2.0
             (600, true, true, 0, 0, 0, true, false, true, 0),       // Balanced
-            (800, true, true, 1, 15, 1, true, false, true, 0),      // Enhanced
+            (600, true, true, 1, 15, 1, true, false, true, 0),      // Enhanced (dev4: 600 — r8q could not hold 800 at 120 Hz)
         };
 
         public static void ApplyPreset(int p)
@@ -71,7 +78,7 @@ namespace ManagedDoom.UnityPort
         public static readonly Ctl[] Editable =
         {
             Ctl.Stick, Ctl.Fire, Ctl.Use, Ctl.WeaponNext, Ctl.WeaponPrev, Ctl.Run,
-            Ctl.Map, Ctl.Menu, Ctl.QuickSave, Ctl.QuickLoad
+            Ctl.Map, Ctl.Menu, Ctl.QuickSave, Ctl.QuickLoad, Ctl.Jump
         };
 
         public static readonly int[] FpsModes = { 0, 60, 90, 120 };
@@ -93,7 +100,7 @@ namespace ManagedDoom.UnityPort
             SmoothLook = PlayerPrefs.GetInt("smooth_look", 1) == 1;
             StablePerf = PlayerPrefs.GetInt("stable_perf", 0) == 1;
             RenderThreads = PlayerPrefs.GetInt("gfx_threads", 0);
-            Resolution = Mathf.Clamp(PlayerPrefs.GetInt("gfx_res", 800) / 200 * 200, 400, 1000);
+            Resolution = Mathf.Clamp(PlayerPrefs.GetInt("gfx_res", 600) / 200 * 200, 400, 1000);
             DynamicRes = PlayerPrefs.GetInt("gfx_dynres", 1) == 1;
             SmoothLighting = PlayerPrefs.GetInt("gfx_light", 1) == 1;
             Bloom = Mathf.Clamp(PlayerPrefs.GetInt("gfx_bloom", 1), 0, 3);
@@ -102,9 +109,21 @@ namespace ManagedDoom.UnityPort
             Sharpen = PlayerPrefs.GetInt("gfx_sharpen", 1) == 1;
             Crt = PlayerPrefs.GetInt("gfx_crt", 0) == 1;
             SideFill = PlayerPrefs.GetInt("gfx_sidefill", 1) == 1;
+            FreeLook = PlayerPrefs.GetInt("free_look", 1) == 1;
+            InvertLook = PlayerPrefs.GetInt("invert_look", 0) == 1;
+            AutoAim = PlayerPrefs.GetInt("autoaim", 1) == 1;
+            Jump = PlayerPrefs.GetInt("jump", 1) == 1;
+            StickMode = Mathf.Clamp(PlayerPrefs.GetInt("stick_mode", 0), 0, 1);
+            Crosshair = Mathf.Clamp(PlayerPrefs.GetInt("crosshair", 0), 0, CrosshairStyles - 1);
             // First start of 0.3.0 (new install or update from 0.2.0): pick a preset for the device.
             if (!PlayerPrefs.HasKey("gfx_preset")) ApplyPreset(SystemInfo.processorCount >= 6 ? 2 : 1);
             else GfxPreset = PlayerPrefs.GetInt("gfx_preset", 2);
+            // dev4: Enhanced moved from 800 to 600 lines (device measurement); migrate 0.3.0 Enhanced once.
+            if (!PlayerPrefs.HasKey("dev4_migrated"))
+            {
+                if (GfxPreset == 2 && Resolution == 800) Resolution = 600;
+                PlayerPrefs.SetInt("dev4_migrated", 1);
+            }
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -149,6 +168,12 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("gfx_crt", Crt ? 1 : 0);
             PlayerPrefs.SetInt("gfx_sidefill", SideFill ? 1 : 0);
             PlayerPrefs.SetInt("gfx_preset", GfxPreset);
+            PlayerPrefs.SetInt("free_look", FreeLook ? 1 : 0);
+            PlayerPrefs.SetInt("invert_look", InvertLook ? 1 : 0);
+            PlayerPrefs.SetInt("autoaim", AutoAim ? 1 : 0);
+            PlayerPrefs.SetInt("jump", Jump ? 1 : 0);
+            PlayerPrefs.SetInt("stick_mode", StickMode);
+            PlayerPrefs.SetInt("crosshair", Crosshair);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

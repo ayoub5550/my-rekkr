@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -549,6 +549,18 @@ namespace ManagedDoom
             get => attacker;
             set => attacker = value;
         }
+
+        /// <summary>my-rekkr dev4: free-look pitch from the last tic command (200-line units).</summary>
+        public int LookPitch { get; set; }
+
+        /// <summary>my-rekkr dev4: tics until the next jump is allowed.</summary>
+        public int JumpTics { get; set; }
+
+        /// <summary>my-rekkr dev4: true when the last command asked to aim with the pitch only.</summary>
+        public bool NoAutoAim { get; set; }
+
+        /// <summary>my-rekkr dev4: aim slope of the view pitch (slope = pitch / 160).</summary>
+        public Fixed PitchSlope => new Fixed(LookPitch * Fixed.FracUnit / 160);
 
         public int ExtraLight
         {

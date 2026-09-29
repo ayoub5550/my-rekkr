@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -129,6 +129,17 @@ namespace ManagedDoom
         public IReadOnlyList<int> TitleX => titleX;
         public IReadOnlyList<int> TitleY => titleY;
         public IReadOnlyList<MenuItem> Items => items;
+
+        /// <summary>my-rekkr dev4: select an item directly (touch).</summary>
+        public void Select(int i)
+        {
+            if (i < 0 || i >= items.Length || i == index) return;
+            index = i;
+            choice = items[index];
+            Menu.StartSound(Sfx.PSTOP);
+        }
+
+        public int Index => index;
         public MenuItem Choice => choice;
     }
 }

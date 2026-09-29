@@ -67,6 +67,8 @@ public sealed partial class RekkrApp
         yield return Wait(6.5F); Shot("01_title"); yield return null;
         yield return TapSeq(Ctl.Ok, 1.0F); Shot("02_menu"); yield return null;           // tap to play -> main menu
         yield return TapSeq(Ctl.Settings, 1.4F); Shot("03_settings_controls"); yield return null;
+        controlsPage = 1; yield return Wait(1.4F); Shot("03b_settings_aim_jump"); yield return null;
+        controlsPage = 0;
         settingsTab = 1; yield return Wait(1.4F); Shot("04_settings_motion"); yield return null;
         settingsTab = 2; yield return Wait(1.6F); Shot("05_settings_display"); yield return null;
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("05b_settings_graphics"); yield return null;
@@ -81,8 +83,11 @@ public sealed partial class RekkrApp
         input.EditMode = false; yield return Wait(0.5F);
         settingsOpen = false;
         yield return Wait(0.6F);
-        yield return TapSeq(Ctl.Ok, 0.9F);                              // NEW GAME
-        yield return TapSeq(Ctl.Ok, 0.9F); Shot("08_episode"); yield return null;          // episode 1
+        // dev4: tap the menu lines directly (NEW GAME, then episode 1) like a finger would.
+        var tapped = MenuTapAt(MenuItemScreenPos(0), true); yield return Wait(0.9F);
+        Log("menu tap new game=" + tapped + " current=" + Doom.Menu.Current?.GetType().Name);
+        tapped = MenuTapAt(MenuItemScreenPos(0), true); yield return Wait(0.9F); Shot("08_episode"); yield return null;
+        Log("menu tap episode=" + tapped);
         yield return TapSeq(Ctl.Down, 0.5F);
         yield return TapSeq(Ctl.Up, 0.7F);
         yield return TapSeq(Ctl.Ok, 1.2F);                              // skill (default)
@@ -90,6 +95,17 @@ public sealed partial class RekkrApp
         var events = new (float t, Action a, string name)[]
         {
             (6F, () => Log("autosave exists=" + File.Exists(SavePath(AutoSlot))), null),
+            // dev4: look up / down, jump, crosshair styles
+            (7F, () => input.AutoPitch = 45F, null),
+            (8.7F, () => { input.AutoPitch = 0; Log("look up pitch=" + input.PitchInt); }, "09_look_up"),
+            (10F, () => input.AutoPitch = -60F, null),
+            (12.5F, () => { input.AutoPitch = 0; Log("look down pitch=" + input.PitchInt); }, "09b_look_down"),
+            (13.5F, () => input.CenterView(), null),
+            (18F, () => input.AutoJump = true, "10b_jump"),
+            (21F, () => { input.AutoJump = false; Log("jumps=" + testJumps); }, null),
+            (40F, () => RekkrSettings.Crosshair = 1, "13b_crosshair_red"),
+            (43F, () => RekkrSettings.Crosshair = 3, "13c_crosshair_dot"),
+            (46F, () => RekkrSettings.Crosshair = 0, null),
             (14F, () => { input.Tap(Ctl.QuickSave); Log("quicksave exists=" + File.Exists(SavePath(QuickSlot))); }, "10_quicksave"),
             (24F, () => HudMode = 1, "11_hud_fullscreen"),
             (32F, () => input.TapSlot(0), null),
@@ -283,6 +299,7 @@ public sealed partial class RekkrApp
     }
 
     private int testGcStart = -1;
+    private int testJumps, lastJumpTics;
 
     // dev3 smooth-look metrics while the autopilot turns: per-frame view-angle step (evenness) and
     // lag = (angle the input asks for) - (angle actually rendered).
@@ -356,7 +373,7 @@ public sealed partial class RekkrApp
         var (renderAvg, renderP99) = Stats(renderTimes);
         var (uploadAvg, uploadP99) = Stats(uploadTimes);
         var gc0 = GC.CollectionCount(0) - testGcStart;
-        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} {LookSummary()} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} lines_max={StartLines()} dynres={RekkrSettings.DynamicRes} dynres_switches={dynSwitches} threads={video.RenderThreads} smooth_light={RekkrSettings.SmoothLighting} post={PostFx.Active} bloom={RekkrSettings.Bloom} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
+        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} jumps={testJumps} {LookSummary()} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} lines_max={StartLines()} dynres={RekkrSettings.DynamicRes} dynres_switches={dynSwitches} threads={video.RenderThreads} smooth_light={RekkrSettings.SmoothLighting} post={PostFx.Active} bloom={RekkrSettings.Bloom} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
         Debug.Log(summary);
         try
         {

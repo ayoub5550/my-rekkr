@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -102,6 +102,8 @@ namespace ManagedDoom
                     cmd.SideMove = (sbyte)data[p++];
                     cmd.AngleTurn = (short)(data[p++] << 8);
                     cmd.Buttons = data[p++];
+                    cmd.LookPitch = 0;   // my-rekkr dev4: demos are vanilla (no free look / jump)
+                    cmd.Ext = 0;
                 }
             }
 

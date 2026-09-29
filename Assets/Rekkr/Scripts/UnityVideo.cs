@@ -105,6 +105,11 @@ namespace ManagedDoom.UnityPort
         /// <summary>See Renderer.LocalViewTurn (smooth look). Set by RekkrApp before Render.</summary>
         public Angle? LocalViewTurn { get => renderer.LocalViewTurn; set => renderer.LocalViewTurn = value; }
 
+        /// <summary>See Renderer.LocalViewPitch (dev4 free look). Set by RekkrApp before Render.</summary>
+        public int LocalViewPitch { get => renderer.LocalViewPitch; set => renderer.LocalViewPitch = value; }
+
+        public (int x, int y, int w, int h) ViewWindow => renderer.ViewWindow;
+
         public void Render(Doom doom, Fixed frameFrac)
         {
             watch.Restart();

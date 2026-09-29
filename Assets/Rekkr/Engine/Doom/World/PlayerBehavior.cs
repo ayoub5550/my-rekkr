@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -79,6 +79,14 @@ namespace ManagedDoom
 
             // Chain saw run forward.
             var cmd = player.Cmd;
+
+            // my-rekkr dev4: free-look pitch and aim mode come from the (non-demo) command extension.
+            player.LookPitch = Math.Clamp((int)cmd.LookPitch, -TicCmdExt.MaxPitch, TicCmdExt.MaxPitch);
+            player.NoAutoAim = (cmd.Ext & TicCmdExt.NoAutoAim) != 0;
+            if (player.JumpTics > 0)
+            {
+                player.JumpTics--;
+            }
             if ((player.Mobj.Flags & MobjFlags.JustAttacked) != 0)
             {
                 cmd.AngleTurn = 0;
@@ -267,6 +275,15 @@ namespace ManagedDoom
             if (cmd.SideMove != 0 && onGround)
             {
                 Thrust(player, player.Mobj.Angle - Angle.Ang90, new Fixed(cmd.SideMove * 2048));
+            }
+
+            // my-rekkr dev4: jump (Crispy Doom style). Only from the ground, with a short cooldown.
+            if ((cmd.Ext & TicCmdExt.Jump) != 0 && onGround && player.JumpTics == 0 &&
+                (player.Cheats & CheatFlags.NoClip) == 0)
+            {
+                player.Mobj.MomZ = Fixed.FromInt(8);
+                player.JumpTics = 18;
+                onGround = false;
             }
 
             if ((cmd.ForwardMove != 0 || cmd.SideMove != 0) &&

@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -116,6 +116,33 @@ namespace ManagedDoom.Video
         private Fixed centerYFrac;
         private Fixed projection;
 
+        // my-rekkr dev4 free look (y-shearing, as in Heretic / Crispy Doom): the horizon moves by
+        // ViewPitch (200-line units) and walls, planes, sprites and sky follow it. The weapon keeps the
+        // unsheared centre. ViewPitch = 0 is the vanilla path (golden hashes unchanged).
+        public static int ViewPitch;
+        /// <summary>my-rekkr dev4: stretch the sky for free look (set while the free-look option is on).</summary>
+        public static bool FreeLookSky;
+        private Fixed baseCenterYFrac;
+        private int curShear;
+
+        private void ApplyShear()
+        {
+            var scale = Math.Max(1, screenHeight / 200);
+            var shear = ViewPitch * scale;
+            var lim = windowHeight / 2 - 2;
+            if (shear > lim) shear = lim;
+            if (shear < -lim) shear = -lim;
+            if (shear == curShear) return;
+            curShear = shear;
+            centerY = windowHeight / 2 + shear;
+            centerYFrac = Fixed.FromInt(centerY);
+            for (int i = 0; i < windowHeight; i++)
+            {
+                var dy = Fixed.Abs(Fixed.FromInt(i - centerY) + Fixed.One / 2);
+                planeYSlope[i] = Fixed.FromInt(nonWideWidth / 2) / dy;
+            }
+        }
+
         // my-rekkr widescreen (Hor+): the window may be wider than 4:3. Vertical scale,
         // lighting and weapon size keep using the 4:3 width ("non-wide"), so a wider screen
         // only shows more to the sides — the same approach as Crispy Doom.
@@ -132,6 +159,8 @@ namespace ManagedDoom.Video
             centerY = windowHeight / 2;
             centerXFrac = Fixed.FromInt(centerX);
             centerYFrac = Fixed.FromInt(centerY);
+            baseCenterYFrac = centerYFrac;
+            curShear = 0;
             projection = Fixed.FromInt(nonWideWidth / 2);
         }
 
@@ -801,6 +830,7 @@ namespace ManagedDoom.Video
 
             viewSin = Trig.Sin(viewAngle);
             viewCos = Trig.Cos(viewAngle);
+            ApplyShear();
 
             // Per-instance counter + array instead of the shared Sector.ValidCount, so parallel
             // strip renderers never write shared state (same result as vanilla for one instance).
@@ -2499,7 +2529,41 @@ namespace ManagedDoom.Video
             var mask = world.Map.SkyTexture.Width - 1;
             var source = world.Map.SkyTexture.Composite.Columns[angle & mask];
             curLight = 0;
-            DrawColumn(source[0], colorMap[0], x, y1, y2, skyInvScale, skyTextureAlt);
+            if (curShear == 0 && !FreeLookSky)
+            {
+                DrawColumn(source[0], colorMap[0], x, y1, y2, skyInvScale, skyTextureAlt);
+                return;
+            }
+            DrawSkyColumnClamped(source[0], x, y1, y2);
+        }
+
+        /// <summary>my-rekkr dev4: sky column under free look. Rows above/below the sky texture repeat its
+        /// top/bottom row instead of wrapping (looking up would otherwise show the sky's bottom).</summary>
+        private void DrawSkyColumnClamped(Column column, int x, int y1, int y2)
+        {
+            if (y2 - y1 < 0)
+            {
+                return;
+            }
+            var map = colorMap[0];
+            var pos1 = screenHeight * (windowX + x) + windowY + y1;
+            var pos2 = pos1 + (y2 - y1);
+            // With free look on, the sky is stretched so that row 0 reaches the top of the window at the
+            // maximum upward pitch (Crispy Doom "stretch sky"); the horizon row (100) stays put.
+            var fracStep = FreeLookSky ? new Fixed((int)((long)skyInvScale.Data * 100 / (100 + TicCmdExt.MaxPitch))) : skyInvScale;
+            var frac = skyTextureAlt + (y1 - centerY) * fracStep;
+            var source = column.Data;
+            var offset = column.Offset;
+            var last = Math.Max(0, Math.Min(column.Length, 128) - 1);
+            for (var pos = pos1; pos <= pos2; pos++)
+            {
+                var ty = frac.Data >> Fixed.FracBits;
+                if (ty < 0) ty = 0; else if (ty > last) ty = last;
+                var t = source[offset + ty];
+                screenData[pos] = map[t];
+                if (tc) { texData[pos] = t; lightData[pos] = 0; }
+                frac += fracStep;
+            }
         }
 
         private void DrawMaskedColumn(
@@ -3033,7 +3097,7 @@ namespace ManagedDoom.Video
                     DrawMaskedFuzzColumn(
                         vis.Patch.Columns[texturecolumn],
                         x,
-                        centerYFrac - (vis.TextureAlt * vis.Scale),
+                        baseCenterYFrac - (vis.TextureAlt * vis.Scale),
                         vis.Scale,
                         -1,
                         windowHeight);
@@ -3050,7 +3114,7 @@ namespace ManagedDoom.Video
                         vis.Patch.Columns[texturecolumn],
                         vis.ColorMap,
                         x,
-                        centerYFrac - (vis.TextureAlt * vis.Scale),
+                        baseCenterYFrac - (vis.TextureAlt * vis.Scale),
                         vis.Scale,
                         Fixed.Abs(vis.InvScale),
                         vis.TextureAlt,

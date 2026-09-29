@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -464,7 +464,16 @@ namespace ManagedDoom
 
             // See which target is to be aimed at.
             var angle = source.Angle;
-            var slope = hs.AimLineAttack(source, angle, Fixed.FromInt(16 * 64));
+            var player = source.Player;
+            Fixed slope;
+            if (player != null && player.NoAutoAim)
+            {
+                // my-rekkr dev4: autoaim off -> the missile follows the crosshair.
+                slope = player.PitchSlope;
+            }
+            else
+            {
+            slope = hs.AimLineAttack(source, angle, Fixed.FromInt(16 * 64));
 
             if (hs.LineTarget == null)
             {
@@ -480,8 +489,10 @@ namespace ManagedDoom
                 if (hs.LineTarget == null)
                 {
                     angle = source.Angle;
-                    slope = Fixed.Zero;
+                    // my-rekkr dev4: free-look pitch when nothing is targeted (0 in demos = vanilla).
+                    slope = player != null ? player.PitchSlope : Fixed.Zero;
                 }
+            }
             }
 
             var x = source.X;

@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.3.0";
+    public const string Version = "0.4.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
@@ -110,11 +110,9 @@ public sealed partial class RekkrApp : MonoBehaviour
         latoFont = Resources.Load<Font>("Rekkr/UI/Lato-Black");
         arabicFont = Resources.Load<Font>("Rekkr/UI/RekkrArabic");
         foreach (var n in new[] { "fire", "use", "wnext", "wprev", "map", "menu", "run", "up", "down", "left", "right",
-                                  "ok", "back", "settings", "qsave", "qload", "play", "move" })
+                                  "ok", "back", "settings", "qsave", "qload", "play", "move", "jump" })
         {
             icons[n] = Resources.Load<Texture2D>("Rekkr/UI/ic_" + n);
-            var ar = Resources.Load<Texture2D>("Rekkr/UI/ic_" + n + "_ar");
-            if (ar != null) icons[n + "_ar"] = ar;
         }
 
         DetectTestLoop();
@@ -283,6 +281,9 @@ public sealed partial class RekkrApp : MonoBehaviour
             if (tics > 0) WatchGameplay();
             var frac = (float)(ticAccum / TicTime);
             video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
+            // dev4 free look: the view uses this frame's pitch; the sim gets it with the next tic.
+            ThreeDRenderer.FreeLookSky = RekkrSettings.FreeLook;
+            video.LocalViewPitch = RekkrSettings.FreeLook && InLevel ? input.PitchInt : 0;
             ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
             postThisFrame = PostFx.Active;
@@ -318,6 +319,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         {
             lastWorld = world;
             autosaveDue = true;
+            input.CenterView();   // dev4: each level starts looking straight ahead
         }
         else
         {
@@ -326,6 +328,8 @@ public sealed partial class RekkrApp : MonoBehaviour
             else if (p.ReadyWeapon == lastWeapon && ammo >= 0 && ammo < lastAmmo) Haptics.Pulse(14, 110);
         }
         lastHealth = p.Health; lastArmor = p.ArmorPoints; lastAmmo = ammo; lastWeapon = p.ReadyWeapon;
+        if (p.JumpTics > lastJumpTics) { testJumps++; Haptics.Pulse(8, 60); }
+        lastJumpTics = p.JumpTics;
 
         if (autosaveDue && world.LevelTime > 70 && p.Health > 0)
         {
@@ -411,6 +415,59 @@ public sealed partial class RekkrApp : MonoBehaviour
     }
 
     public void QuickLoad() => LoadLatest();
+
+    /// <summary>dev4 tests: screen position of menu line <paramref name="i"/> of a SelectableMenu.</summary>
+    public Vector2 MenuItemScreenPos(int i)
+    {
+        if (!(Doom?.Menu.Current is SelectableMenu m) || i >= m.Items.Count) return new Vector2(-1, -1);
+        var scale = video.FrameHeight / 200F;
+        var it = m.Items[i];
+        var fx = (video.FrameWidth - 320 * scale) / 2 + (it.SkullX + 60) * scale;
+        var fy = (it.SkullY + 9) * scale;
+        return new Vector2(gameRect.x + fx / video.FrameWidth * gameRect.width, gameRect.y + fy / video.FrameHeight * gameRect.height);
+    }
+
+    /// <summary>dev4: the Doom menu line under a screen point (select + activate when <paramref name="act"/>).
+    /// Simple items are activated, toggles flipped, sliders only selected (use the D-pad to change them).</summary>
+    public bool MenuTapAt(Vector2 p, bool act)
+    {
+        if (Doom == null || !Doom.Menu.Active || settingsOpen) return false;
+        var cur = Doom.Menu.Current;
+        System.Collections.Generic.IReadOnlyList<MenuItem> items; int index;
+        switch (cur)
+        {
+            case SelectableMenu m: items = m.Items; index = m.Index; break;
+            case LoadMenu m: items = m.Items; index = m.Index; break;
+            case SaveMenu m: items = m.Items; index = m.Index; break;
+            default: return false;
+        }
+        var scale = video.FrameHeight / 200F;
+        var fx = (p.x - gameRect.x) / gameRect.width * video.FrameWidth;
+        var fy = (p.y - gameRect.y) / gameRect.height * video.FrameHeight;
+        var mx = (fx - (video.FrameWidth - 320 * scale) / 2) / scale;
+        var my = fy / scale;
+        int hit = -1; var best = 11F;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var it = items[i];
+            var d = Mathf.Abs(my - (it.SkullY + 9));
+            if (d < best && mx > it.SkullX - 8 && mx < it.SkullX + 250) { best = d; hit = i; }
+        }
+        if (hit < 0) return false;
+        if (!act) return true;
+        switch (cur)
+        {
+            case SelectableMenu m: m.Select(hit); break;
+            case LoadMenu m: m.Select(hit); break;
+            case SaveMenu m: m.Select(hit); break;
+        }
+        if (!(items[hit] is SliderMenuItem))
+        {
+            Doom.PostEvent(new DoomEvent(ManagedDoom.EventType.KeyDown, ManagedDoom.DoomKey.Enter));
+            Doom.PostEvent(new DoomEvent(ManagedDoom.EventType.KeyUp, ManagedDoom.DoomKey.Enter));
+        }
+        return true;
+    }
     public void Continue() => LoadLatest();
 
     private void LoadLatest()

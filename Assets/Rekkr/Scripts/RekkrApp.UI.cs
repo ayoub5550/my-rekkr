@@ -1,5 +1,6 @@
-// my-rekkr — IMGUI layer: game frame, touch controls, settings panel (3 tabs, English/Arabic
-// with right-to-left layout), button layout editor and FPS counter.
+// my-rekkr — IMGUI layer: game frame, touch controls, crosshair, settings panel (4 tabs, English/
+// Arabic with right-to-left layout), button layout editor and FPS counter.
+// dev4: "carved stone" skin in REKKR's own style (RekkrSkin: WAD pixel font + stone frames).
 // SPDX-License-Identifier: GPL-2.0-or-later
 using ManagedDoom;
 using ManagedDoom.UnityPort;
@@ -8,53 +9,39 @@ using EventType = UnityEngine.EventType;
 
 public sealed partial class RekkrApp
 {
-    private static readonly Color Gold = new Color(0.87F, 0.70F, 0.36F);
-    private GUIStyle titleStyle, rowStyle, smallStyle, btnStyle, hintStyle;
-    private bool stylesArabic;
+    private static readonly Color Bone = new Color(1F, 0.93F, 0.72F);
+    private readonly RekkrSkin skin = new RekkrSkin();
+    private bool skinFrames;
 
-    private void EnsureStyles()
+    // Text sizes (glyph height in screen pixels; the pixel font snaps to integer scales).
+    private static float PxTitle => Screen.height * 0.046F;
+    private static float PxRow => Screen.height * 0.028F;
+    private static float PxSmall => Screen.height * 0.022F;
+    private static float PxHint => Screen.height * 0.019F;
+    private static TextAnchor Lead => Loc.Arabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+
+    private void EnsureSkin()
     {
-        if (titleStyle == null)
-        {
-            titleStyle = new GUIStyle { alignment = TextAnchor.MiddleCenter, normal = { textColor = Gold } };
-            rowStyle = new GUIStyle { alignment = TextAnchor.MiddleLeft, normal = { textColor = new Color(0.95F, 0.92F, 0.85F) } };
-            smallStyle = new GUIStyle { alignment = TextAnchor.MiddleCenter, normal = { textColor = new Color(1, 1, 1, 0.85F) } };
-            btnStyle = new GUIStyle { alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } };
-            hintStyle = new GUIStyle { alignment = TextAnchor.MiddleLeft, wordWrap = true, normal = { textColor = new Color(1, 1, 1, 0.6F) } };
-            stylesArabic = !Loc.Arabic;
-        }
-        if (stylesArabic != Loc.Arabic)
-        {
-            stylesArabic = Loc.Arabic;
-            var f = Loc.Arabic && arabicFont != null ? arabicFont : latoFont;
-            titleStyle.font = rowStyle.font = smallStyle.font = btnStyle.font = hintStyle.font = f;
-            rowStyle.alignment = Loc.Arabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-            hintStyle.alignment = Loc.Arabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-        }
-        float H = Screen.height;
-        titleStyle.fontSize = Mathf.RoundToInt(H * 0.052F);
-        rowStyle.fontSize = Mathf.RoundToInt(H * 0.04F);
-        smallStyle.fontSize = Mathf.RoundToInt(H * 0.028F);
-        btnStyle.fontSize = Mathf.RoundToInt(H * 0.038F);
-        hintStyle.fontSize = Mathf.RoundToInt(H * 0.027F);
+        if (!skinFrames) { skin.InitFrames(arabicFont != null ? arabicFont : latoFont); skinFrames = true; }
+        if (!skin.Ready && content != null) skin.InitFont(content.Wad, arabicFont != null ? arabicFont : latoFont);
     }
 
     private void OnGUI()
     {
         var evt = Event.current.type;
-        if (evt != EventType.Repaint && !settingsOpen) return;
-        EnsureStyles();
+        if (evt != EventType.Repaint && !settingsOpen && (input == null || !input.EditMode)) return;
+        EnsureSkin();
         float H = Screen.height, W = Screen.width;
 
         if (fatal != null)
         {
             GUI.color = Color.white;
-            GUI.Label(new Rect(20, 20, W - 40, H - 40), "REKKR failed to start:\n" + fatal, smallStyle);
+            skin.Wrapped(new Rect(20, 20, W - 40, H - 40), "REKKR failed to start: " + fatal, PxHint, Ink.Bone, false);
             return;
         }
         if (Doom == null)
         {
-            GUI.Label(new Rect(0, 0, W, H), status ?? "", titleStyle);
+            skin.Text(new Rect(0, 0, W, H), status ?? "", PxTitle, TextAnchor.MiddleCenter, Ink.Bone);
             return;
         }
 
@@ -68,51 +55,104 @@ public sealed partial class RekkrApp
                 GUI.DrawTexture(new Rect(0, 0, W, H), texWhite);
                 GUI.color = Color.white;
             }
+            DrawCrosshair();
             DrawControls();
             if (input.TitleMode && !settingsOpen)
             {
                 var a = 0.55F + 0.45F * Mathf.Sin(Time.unscaledTime * 3.2F);
                 var demo = Doom.State == DoomState.DemoPlayback || (Doom.State == DoomState.Opening && Doom.Opening.State == OpeningSequenceState.Demo);
                 var y = canContinue ? H * 0.56F : demo ? H * 0.68F : H * 0.86F;
-                var pill = new Rect(W * 0.5F - H * 0.26F, y, H * 0.52F, H * 0.1F);
+                var pill = new Rect(W * 0.5F - H * 0.3F, y, H * 0.6F, H * 0.1F);
                 if (demo)
                 {
-                    GUI.color = new Color(0, 0, 0, 0.55F * a);
+                    GUI.color = new Color(0, 0, 0, 0.6F * a);
                     GUI.DrawTexture(pill, texWhite);
+                    GUI.color = Color.white;
                 }
-                GUI.color = new Color(1, 1, 1, a);
-                GUI.Label(pill, Loc.T("tap_to_play"), titleStyle);
-                GUI.color = Color.white;
+                skin.Text(pill, Loc.T("tap_to_play"), PxTitle * 0.85F, TextAnchor.MiddleCenter, Ink.Bone, a);
             }
             if (RekkrSettings.ShowFps && !settingsOpen)
             {
-                GUI.color = new Color(0, 0, 0, 0.5F);
-                var r = new Rect(W * 0.5F - H * 0.09F, H * 0.01F, H * 0.18F, H * 0.05F);
+                GUI.color = new Color(0, 0, 0, 0.55F);
+                var r = new Rect(W * 0.5F - H * 0.1F, H * 0.01F, H * 0.2F, H * 0.05F);
                 GUI.DrawTexture(r, texWhite);
                 GUI.color = Color.white;
                 var fpsInt = Mathf.RoundToInt(fpsValue);
                 if (fpsInt != fpsShown) { fpsShown = fpsInt; fpsLabel = fpsInt + " FPS"; }
-                GUI.Label(r, fpsLabel, smallStyle);
+                skin.Text(r, fpsLabel, PxSmall, TextAnchor.MiddleCenter, Ink.Bone);
             }
         }
         if (input.EditMode) DrawEditor();
         else if (settingsOpen) DrawSettings();
     }
 
-    private readonly System.Collections.Generic.Dictionary<string, string> arIconKeys = new System.Collections.Generic.Dictionary<string, string>();
     private int fpsShown = -1; private string fpsLabel = "";
+    private readonly System.Collections.Generic.Dictionary<string, string> labelKeys = new System.Collections.Generic.Dictionary<string, string>();
 
     private Texture2D Icon(string name)
     {
         if (name == null) return null;
-        if (Loc.Arabic)
-        {
-            // dev3 zero-GC: cache the "_ar" key instead of concatenating every frame.
-            if (!arIconKeys.TryGetValue(name, out var key)) arIconKeys[name] = key = name + "_ar";
-            if (icons.TryGetValue(key, out var ar) && ar != null) return ar;
-        }
         return icons.TryGetValue(name, out var t) ? t : null;
     }
+
+    /// <summary>Button caption under the icon (runtime pixel font; Arabic via TTF). Null = icon only.</summary>
+    private string Label(string icon)
+    {
+        if (icon == null) return null;
+        if (!labelKeys.TryGetValue(icon, out var key)) labelKeys[icon] = key = "lbl_" + icon;
+        var s = Loc.T(key);
+        return ReferenceEquals(s, key) ? null : s;
+    }
+
+    // ------------------------------------------------------------------ crosshair
+
+    private bool CrosshairVisible()
+    {
+        if (RekkrSettings.Crosshair >= 4 || !InLevel || settingsOpen || input.EditMode || input.MenuMode || input.TitleMode) return false;
+        if (Doom.Menu.Active || Doom.Game.World.AutoMap.Visible) return false;
+        var p = Doom.Game.World.ConsolePlayer;
+        return p.PlayerState == PlayerState.Live && p.Mobj != null;
+    }
+
+    private void DrawCrosshair()
+    {
+        if (!CrosshairVisible()) return;
+        var (wx, wy, ww, wh) = video.ViewWindow;
+        var sx = gameRect.width / video.FrameWidth; var sy = gameRect.height / video.FrameHeight;
+        var c = new Vector2(gameRect.x + (wx + ww * 0.5F) * sx, gameRect.y + (wy + wh * 0.5F) * sy);
+        c.x = Mathf.Round(c.x); c.y = Mathf.Round(c.y);
+        float H = Screen.height;
+        var th = Mathf.Max(2F, Mathf.Round(H * 0.004F));
+        var len = Mathf.Round(H * 0.021F);
+        var gap = Mathf.Round(H * 0.006F);
+        var col = RekkrSettings.Crosshair == 1 ? new Color(0.95F, 0.16F, 0.1F) : RekkrSettings.Crosshair == 2 ? new Color(0.4F, 1F, 0.35F) : Bone;
+        col.a = 0.92F;
+        var dark = new Color(0.02F, 0.02F, 0.03F, 0.75F);
+        if (RekkrSettings.Crosshair == 3)
+        {
+            var d = Mathf.Round(th * 2.6F);
+            Box(new Rect(c.x - d / 2 - 1, c.y - d / 2 - 1, d + 2, d + 2), dark);
+            Box(new Rect(c.x - d / 2, c.y - d / 2, d, d), col);
+            return;
+        }
+        // four arms with a gap in the middle, 1 px dark outline
+        var arms = new[]
+        {
+            new Rect(c.x - gap - len, c.y - th / 2, len, th), new Rect(c.x + gap, c.y - th / 2, len, th),
+            new Rect(c.x - th / 2, c.y - gap - len, th, len), new Rect(c.x - th / 2, c.y + gap, th, len)
+        };
+        foreach (var a in arms) Box(new Rect(a.x - 1, a.y - 1, a.width + 2, a.height + 2), dark);
+        foreach (var a in arms) Box(a, col);
+        GUI.color = Color.white;
+    }
+
+    private void Box(Rect r, Color c)
+    {
+        GUI.color = c;
+        GUI.DrawTexture(r, texWhite);
+    }
+
+    // ------------------------------------------------------------------ touch controls
 
     private void DrawControls()
     {
@@ -124,15 +164,15 @@ public sealed partial class RekkrApp
         {
             var r = input.StickRadius;
             var sel = input.EditMode && input.EditSelected == Ctl.Stick;
-            GUI.color = new Color(1, 1, 1, alpha * (input.StickActive || sel ? 1F : 0.7F));
+            GUI.color = new Color(1, 1, 1, alpha * (input.StickActive || sel ? 1F : 0.75F));
             GUI.DrawTexture(new Rect(input.StickCenter.x - r, input.StickCenter.y - r, 2 * r, 2 * r), texStickBase);
-            var k = r * 0.46F;
+            var k = r * 0.44F;
             GUI.color = new Color(1, 1, 1, alpha * (input.StickActive ? 1F : 0.85F));
             GUI.DrawTexture(new Rect(input.StickKnob.x - k, input.StickKnob.y - k, 2 * k, 2 * k), texStickKnob);
             if (input.EditMode)
             {
                 GUI.color = Color.white;
-                GUI.Label(new Rect(input.StickHome.x - r, input.StickHome.y + r * 0.72F, 2 * r, r * 0.4F), Loc.T("stick"), smallStyle);
+                skin.Text(new Rect(input.StickHome.x - r, input.StickHome.y + r * 1.02F, 2 * r, r * 0.3F), Loc.T("stick"), PxSmall, TextAnchor.MiddleCenter, Ink.Bone);
                 if (sel) DrawRing(input.StickHome, r * 1.06F);
             }
         }
@@ -143,17 +183,25 @@ public sealed partial class RekkrApp
             if (settingsOpen && !input.EditMode && b.Id != Ctl.Settings) continue;
             if (b.PillWidth > 0) { DrawPill(b); continue; }
             var pressed = b.Held || b.PressFlash > 0;
-            if (b.Id == Ctl.Run && input.RunOn) pressed = true;
-            var scale = pressed ? 0.94F : 1F;
+            var lit = pressed || (b.Id == Ctl.Run && input.RunOn);
+            var scale = pressed ? 0.95F : 1F;
             var r = b.Radius * scale;
             var rect = new Rect(b.Center.x - r, b.Center.y - r, 2 * r, 2 * r);
-            GUI.color = new Color(1, 1, 1, pressed ? Mathf.Min(1F, alpha + 0.2F) : alpha);
-            GUI.DrawTexture(rect, pressed ? texBtnPressed : texBtn);
+            GUI.color = new Color(1, 1, 1, lit ? Mathf.Min(1F, alpha + 0.2F) : alpha);
+            GUI.DrawTexture(rect, lit ? texBtnPressed : texBtn);
             var ic = Icon(b.Icon);
+            var label = Label(b.Icon);
+            var ia = Mathf.Min(1F, alpha + 0.2F);
             if (ic != null)
             {
-                GUI.color = pressed ? new Color(0.12F, 0.08F, 0.04F, 1F) : new Color(1F, 0.96F, 0.88F, Mathf.Min(1F, alpha + 0.15F));
+                GUI.color = lit ? new Color(1F, 0.98F, 0.9F, 1F) : new Color(Bone.r, Bone.g, Bone.b, ia);
                 GUI.DrawTexture(rect, ic);
+            }
+            if (label != null && r > Screen.height * 0.035F)
+            {
+                GUI.color = Color.white;
+                var lr = new Rect(rect.x + r * 0.12F, b.Center.y + r * 0.2F, 2 * r * 0.88F, r * 0.34F);
+                skin.Text(lr, label, Mathf.Max(7F, r * 0.2F), TextAnchor.MiddleCenter, Ink.Bone, ia);
             }
             if (input.EditMode && input.EditSelected == b.Id) DrawRing(b.Center, b.Radius * 1.12F);
         }
@@ -162,7 +210,7 @@ public sealed partial class RekkrApp
 
     private void DrawRing(Vector2 c, float r)
     {
-        GUI.color = new Color(1F, 0.85F, 0.4F, 0.55F + 0.35F * Mathf.Sin(Time.unscaledTime * 6F));
+        GUI.color = new Color(1F, 0.35F, 0.2F, 0.55F + 0.35F * Mathf.Sin(Time.unscaledTime * 6F));
         GUI.DrawTexture(new Rect(c.x - r, c.y - r, 2 * r, 2 * r), texStickBase);
         GUI.color = Color.white;
     }
@@ -171,77 +219,99 @@ public sealed partial class RekkrApp
     {
         var r = b.PillRect;
         var pressed = b.Held || b.PressFlash > 0;
-        GUI.color = pressed ? Gold : new Color(0.09F, 0.07F, 0.05F, 0.9F);
-        GUI.DrawTexture(r, texWhite);
-        GUI.color = Gold;
-        var bw = Mathf.Max(2, Screen.height * 0.004F);
-        GUI.DrawTexture(new Rect(r.x, r.y, r.width, bw), texWhite);
-        GUI.DrawTexture(new Rect(r.x, r.yMax - bw, r.width, bw), texWhite);
-        GUI.DrawTexture(new Rect(r.x, r.y, bw, r.height), texWhite);
-        GUI.DrawTexture(new Rect(r.xMax - bw, r.y, bw, r.height), texWhite);
+        r = new Rect(r.x - r.height * 0.15F, r.y - r.height * 0.1F, r.width + r.height * 0.3F, r.height * 1.2F);
+        GUI.color = Color.white;
+        skin.Frame(pressed ? skin.PlateOn : skin.Plate, r);
         var ic = Icon("play");
         var iconRect = Loc.Arabic
             ? new Rect(r.xMax - r.height * 1.05F, r.y, r.height, r.height)
-            : new Rect(r.x + r.height * 0.05F, r.y, r.height, r.height);
-        if (ic != null) { GUI.color = pressed ? Color.black : Color.white; GUI.DrawTexture(iconRect, ic); }
-        GUI.color = pressed ? Color.black : Color.white;
+            : new Rect(r.x + r.height * 0.1F, r.y, r.height, r.height);
+        if (ic != null) { GUI.color = Bone; GUI.DrawTexture(iconRect, ic); GUI.color = Color.white; }
         var textRect = Loc.Arabic ? new Rect(r.x, r.y, r.width - r.height * 0.9F, r.height) : new Rect(r.x + r.height * 0.9F, r.y, r.width - r.height * 0.9F, r.height);
-        GUI.Label(textRect, Loc.T("continue"), btnStyle);
-        GUI.color = Color.white;
+        skin.Text(textRect, Loc.T("continue"), PxRow * 1.1F, TextAnchor.MiddleCenter, Ink.Bone);
     }
 
     // ------------------------------------------------------------------ settings panel
 
     private Rect panel;
     private float rowY, rowH;
+    private int controlsPage;
 
     private void DrawSettings()
     {
         float W = Screen.width, H = Screen.height;
-        panel = new Rect(W * 0.18F, H * 0.05F, W * 0.64F, H * 0.9F);
-        GUI.color = new Color(0, 0, 0, 0.82F);
+        panel = new Rect(W * 0.1F, H * 0.035F, W * 0.8F, H * 0.93F);
+        GUI.color = new Color(0, 0, 0, 0.78F);
         GUI.DrawTexture(new Rect(0, 0, W, H), texWhite);
-        GUI.color = new Color(0.09F, 0.07F, 0.05F, 0.97F);
-        GUI.DrawTexture(panel, texWhite);
-        Frame(panel, Gold, Mathf.Max(2, H * 0.004F));
         GUI.color = Color.white;
+        skin.Frame(skin.Panel, panel);
 
-        GUI.Label(new Rect(panel.x, panel.y + H * 0.01F, panel.width, H * 0.08F), Loc.T("settings"), titleStyle);
+        skin.Text(new Rect(panel.x, panel.y + H * 0.035F, panel.width, H * 0.07F), Loc.T("settings"), PxTitle, TextAnchor.MiddleCenter, Ink.Red);
 
         // Tabs (right-to-left order in Arabic).
         string[] tabs = { Loc.T("tab_controls"), Loc.T("tab_motion"), Loc.T("tab_display"), Loc.T("tab_graphics") };
-        var tw = (panel.width - W * 0.04F) / 4F;
+        var inner = panel.width - W * 0.07F;
+        var tw = inner / 4F;
         for (var i = 0; i < 4; i++)
         {
             var slot = Loc.Arabic ? 3 - i : i;
-            var tr = new Rect(panel.x + W * 0.02F + slot * tw + W * 0.004F, panel.y + H * 0.1F, tw - W * 0.008F, H * 0.075F);
-            if (FlatButton(tr, tabs[i], settingsTab == i, smallStyle)) settingsTab = i;
+            var tr = new Rect(panel.x + W * 0.035F + slot * tw + W * 0.004F, panel.y + H * 0.115F, tw - W * 0.008F, H * 0.078F);
+            if (Plate(tr, tabs[i], settingsTab == i, PxSmall)) { settingsTab = i; controlsPage = 0; gfxPage = 0; }
         }
 
-        rowY = panel.y + H * 0.2F;
-        rowH = H * 0.093F;
+        rowY = panel.y + H * 0.215F;
+        rowH = H * 0.087F;
+        string footer = Loc.T("footer");
         switch (settingsTab)
         {
-            case 0: DrawControlsTab(); break;
+            case 0: DrawControlsTab(ref footer); break;
             case 1: DrawMotionTab(); break;
             case 2: DrawDisplayTab(); break;
             default: DrawGraphicsTab(); break;
         }
 
-        var done = new Rect(panel.center.x - W * 0.08F, panel.yMax - H * 0.115F, W * 0.16F, H * 0.08F);
-        if (FlatButton(done, Loc.T("done"))) ToggleSettings();
-        GUI.Label(new Rect(panel.x, panel.yMax - H * 0.035F, panel.width, H * 0.03F), Loc.T("footer"), smallStyle);
+        var done = new Rect(panel.center.x - W * 0.08F, panel.yMax - H * 0.135F, W * 0.16F, H * 0.08F);
+        if (Plate(done, Loc.T("done"), true, PxRow)) ToggleSettings();
+        skin.Text(new Rect(panel.x + W * 0.03F, panel.yMax - H * 0.058F, panel.width - W * 0.06F, H * 0.03F), footer, PxHint, TextAnchor.MiddleCenter, Ink.Dim);
     }
 
-    private void DrawControlsTab()
+    /// <summary>Bottom corner button (page switch) on the leading side, left of DONE.</summary>
+    private bool CornerButton(string text)
     {
-        RekkrSettings.LookSensitivity = Stepper(Loc.T("look_sens"), RekkrSettings.LookSensitivity, 1, 10, 1, "");
-        RekkrSettings.ControlsScale = Stepper(Loc.T("btn_size"), RekkrSettings.ControlsScale, 70, 140, 10, "%");
-        RekkrSettings.ControlsOpacity = Stepper(Loc.T("btn_alpha"), RekkrSettings.ControlsOpacity, 30, 100, 10, "%");
-        RekkrSettings.LeftHanded = Toggle(Loc.T("left"), RekkrSettings.LeftHanded);
-        var run = Toggle(Loc.T("run"), config.game_alwaysrun);
-        if (run != config.game_alwaysrun) input.SetRun(run);
-        if (ActionRow(Loc.T("edit"), Loc.T("edit_btn"))) OpenEditor();
+        float W = Screen.width, H = Screen.height;
+        var w = W * 0.2F;
+        var r = Loc.Arabic
+            ? new Rect(panel.xMax - W * 0.04F - w, panel.yMax - H * 0.135F, w, H * 0.08F)
+            : new Rect(panel.x + W * 0.04F, panel.yMax - H * 0.135F, w, H * 0.08F);
+        return Plate(r, text, false, PxSmall);
+    }
+
+    private void DrawControlsTab(ref string footer)
+    {
+        if (controlsPage == 0)
+        {
+            RekkrSettings.LookSensitivity = Stepper(Loc.T("look_sens"), RekkrSettings.LookSensitivity, 1, 10, 1, "");
+            RekkrSettings.ControlsScale = Stepper(Loc.T("btn_size"), RekkrSettings.ControlsScale, 70, 140, 10, "%");
+            RekkrSettings.ControlsOpacity = Stepper(Loc.T("btn_alpha"), RekkrSettings.ControlsOpacity, 30, 100, 10, "%");
+            if (Cycle(Loc.T("stick_mode"), Loc.T("stick_" + RekkrSettings.StickMode))) RekkrSettings.StickMode = 1 - RekkrSettings.StickMode;
+            RekkrSettings.LeftHanded = Toggle(Loc.T("left"), RekkrSettings.LeftHanded);
+            if (ActionRow(Loc.T("edit"), Loc.T("edit_btn"))) OpenEditor();
+            if (CornerButton(Loc.Arabic ? "< " + Loc.T("more") : Loc.T("more") + " >")) controlsPage = 1;
+        }
+        else
+        {
+            var fl = Toggle(Loc.T("free_look"), RekkrSettings.FreeLook);
+            if (fl != RekkrSettings.FreeLook) { RekkrSettings.FreeLook = fl; if (!fl) input.CenterView(); }
+            RekkrSettings.InvertLook = Toggle(Loc.T("invert_look"), RekkrSettings.InvertLook);
+            RekkrSettings.AutoAim = Toggle(Loc.T("autoaim"), RekkrSettings.AutoAim);
+            RekkrSettings.Jump = Toggle(Loc.T("jump"), RekkrSettings.Jump);
+            if (Cycle(Loc.T("crosshair"), Loc.T("xh_" + RekkrSettings.Crosshair)))
+                RekkrSettings.Crosshair = (RekkrSettings.Crosshair + 1) % RekkrSettings.CrosshairStyles;
+            var run = Toggle(Loc.T("run"), config.game_alwaysrun);
+            if (run != config.game_alwaysrun) input.SetRun(run);
+            if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) controlsPage = 0;
+            footer = Loc.T("look_hint");
+        }
     }
 
     private void DrawMotionTab()
@@ -262,7 +332,7 @@ public sealed partial class RekkrApp
             if (hap) Haptics.Pulse(40, 200, 0);
         }
         Hint(Loc.T("haptics_hint"));
-        // dev3: in this tab because the Controls tab is full (7 rows would overlap DONE).
+        // dev3: in this tab because the Controls tab is full.
         RekkrSettings.SmoothLook = Toggle(Loc.T("smooth_look"), RekkrSettings.SmoothLook);
     }
 
@@ -270,8 +340,8 @@ public sealed partial class RekkrApp
     {
         var modeIdx = System.Array.IndexOf(RekkrSettings.FpsModes, RekkrSettings.FpsMode);
         if (modeIdx < 0) modeIdx = 0;
-        var fpsLabel = RekkrSettings.FpsMode == 0 ? Mix(Loc.T("auto"), DisplayRate.Target.ToString()) : RekkrSettings.FpsMode.ToString();
-        if (Cycle(Loc.T("fps"), fpsLabel))
+        var fpsLabelTxt = RekkrSettings.FpsMode == 0 ? Mix(Loc.T("auto"), DisplayRate.Target.ToString()) : RekkrSettings.FpsMode.ToString();
+        if (Cycle(Loc.T("fps"), fpsLabelTxt))
         {
             RekkrSettings.FpsMode = RekkrSettings.FpsModes[(modeIdx + 1) % RekkrSettings.FpsModes.Length];
             DisplayRate.Apply(RekkrSettings.FpsMode);
@@ -325,15 +395,11 @@ public sealed partial class RekkrApp
             if (sh != RekkrSettings.Sharpen) { RekkrSettings.Sharpen = sh; MarkCustom(); }
             var crt = Toggle(Loc.T("crt"), RekkrSettings.Crt);
             if (crt != RekkrSettings.Crt) { RekkrSettings.Crt = crt; MarkCustom(); }
-            // Side fill + back share the last row: back button replaces the "Effects" row of page 1.
             var sf = Toggle(Loc.T("sidefill"), RekkrSettings.SideFill);
             if (sf != RekkrSettings.SideFill) { RekkrSettings.SideFill = sf; MarkCustom(); }
-            var back = new Rect(panel.x + panel.width * 0.06F, panel.yMax - H_ * 0.115F, panel.width * 0.16F, H_ * 0.08F);
-            if (FlatButton(back, Loc.T("gfx_back"))) gfxPage = 0;
+            if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) gfxPage = 0;
         }
     }
-
-    private static float H_ => Screen.height;
 
     private void MarkCustom()
     {
@@ -383,92 +449,87 @@ public sealed partial class RekkrApp
 
     // Row helpers: label on the leading side, control on the trailing side (mirrored in Arabic).
     private Rect LabelRect() => Loc.Arabic
-        ? new Rect(panel.center.x - panel.width * 0.05F, rowY, panel.width * 0.48F, rowH)
-        : new Rect(panel.x + panel.width * 0.06F, rowY, panel.width * 0.5F, rowH);
+        ? new Rect(panel.center.x - panel.width * 0.02F, rowY, panel.width * 0.45F, rowH)
+        : new Rect(panel.x + panel.width * 0.07F, rowY, panel.width * 0.5F, rowH);
 
     private Rect ControlRect(float width)
     {
-        var bsz = rowH * 0.78F;
+        var bsz = rowH * 0.8F;
         var y = rowY + (rowH - bsz) / 2;
         return Loc.Arabic
-            ? new Rect(panel.x + panel.width * 0.06F, y, width, bsz)
-            : new Rect(panel.xMax - panel.width * 0.06F - width, y, width, bsz);
+            ? new Rect(panel.x + panel.width * 0.07F, y, width, bsz)
+            : new Rect(panel.xMax - panel.width * 0.07F - width, y, width, bsz);
+    }
+
+    private void RowLabel(string label)
+    {
+        skin.Text(LabelRect(), label, PxRow, Lead, Ink.Bone);
+        // thin engraved separator above every row but the first
+        if (Event.current.type == EventType.Repaint && rowY > panel.y + Screen.height * 0.22F)
+        {
+            GUI.color = new Color(0.55F, 0.62F, 0.62F, 0.18F);
+            GUI.DrawTexture(new Rect(panel.x + panel.width * 0.06F, rowY, panel.width * 0.88F, 1), texWhite);
+            GUI.color = Color.white;
+        }
     }
 
     private int Stepper(string label, int value, int min, int max, int step, string unit)
     {
-        GUI.Label(LabelRect(), label, rowStyle);
-        var bsz = rowH * 0.78F;
-        var r = ControlRect(bsz * 4.6F);
-        if (FlatButton(new Rect(r.x, r.y, bsz, bsz), "–")) value = Mathf.Max(min, value - step);
-        GUI.Label(new Rect(r.x + bsz, r.y, r.width - 2 * bsz, bsz), value + unit, titleStyle);
-        if (FlatButton(new Rect(r.xMax - bsz, r.y, bsz, bsz), "+")) value = Mathf.Min(max, value + step);
+        RowLabel(label);
+        var bsz = rowH * 0.8F;
+        var r = ControlRect(bsz * 5F);
+        if (Plate(new Rect(r.x, r.y, bsz * 1.1F, bsz), "-", false, PxRow * 1.5F)) value = Mathf.Max(min, value - step);
+        skin.Text(new Rect(r.x + bsz * 1.1F, r.y, r.width - 2.2F * bsz, bsz), value + unit, PxRow * 1.15F, TextAnchor.MiddleCenter, Ink.Red);
+        if (Plate(new Rect(r.xMax - bsz * 1.1F, r.y, bsz * 1.1F, bsz), "+", false, PxRow * 1.5F)) value = Mathf.Min(max, value + step);
         rowY += rowH;
         return value;
     }
 
     private bool Toggle(string label, bool value)
     {
-        GUI.Label(LabelRect(), label, rowStyle);
-        var bsz = rowH * 0.78F;
-        if (FlatButton(ControlRect(bsz * 4.6F), value ? Loc.T("on") : Loc.T("off"), value)) value = !value;
+        RowLabel(label);
+        var bsz = rowH * 0.8F;
+        if (Plate(ControlRect(bsz * 5F), value ? Loc.T("on") : Loc.T("off"), value, PxRow, !value)) value = !value;
         rowY += rowH;
         return value;
     }
 
     private bool Cycle(string label, string value, bool raw = false)
     {
-        GUI.Label(LabelRect(), label, rowStyle);
-        var bsz = rowH * 0.78F;
-        var hit = FlatButton(ControlRect(bsz * 6.2F), raw ? Loc.Shape(value) : value, false, smallStyle);
+        RowLabel(label);
+        var bsz = rowH * 0.8F;
+        var hit = Plate(ControlRect(bsz * 7F), raw ? Loc.Shape(value) : value, false, PxSmall);
         rowY += rowH;
         return hit;
     }
 
     private bool ActionRow(string label, string button)
     {
-        GUI.Label(LabelRect(), label, rowStyle);
-        var bsz = rowH * 0.78F;
-        var hit = FlatButton(ControlRect(bsz * 4.6F), button, true);
+        RowLabel(label);
+        var bsz = rowH * 0.8F;
+        var hit = Plate(ControlRect(bsz * 5F), button, true, PxRow);
         rowY += rowH;
         return hit;
     }
 
     private void Hint(string text)
     {
-        var r = Loc.Arabic
-            ? new Rect(panel.x + panel.width * 0.06F, rowY - rowH * 0.2F, panel.width * 0.88F, rowH * 0.55F)
-            : new Rect(panel.x + panel.width * 0.06F, rowY - rowH * 0.2F, panel.width * 0.88F, rowH * 0.55F);
-        GUI.Label(r, text, hintStyle);
-        rowY += rowH * 0.45F;
+        var r = new Rect(panel.x + panel.width * 0.07F, rowY - rowH * 0.22F, panel.width * 0.86F, rowH * 0.55F);
+        skin.Wrapped(r, text, PxHint, Ink.Dim, Loc.Arabic);
+        rowY += rowH * 0.42F;
     }
 
-    private void Frame(Rect r, Color c, float bw)
-    {
-        GUI.color = c;
-        GUI.DrawTexture(new Rect(r.x, r.y, r.width, bw), texWhite);
-        GUI.DrawTexture(new Rect(r.x, r.yMax - bw, r.width, bw), texWhite);
-        GUI.DrawTexture(new Rect(r.x, r.y, bw, r.height), texWhite);
-        GUI.DrawTexture(new Rect(r.xMax - bw, r.y, bw, r.height), texWhite);
-        GUI.color = Color.white;
-    }
-
-    private bool FlatButton(Rect r, string text, bool on = false, GUIStyle style = null)
+    /// <summary>Stone plate button (lit red when <paramref name="on"/>). Returns true when tapped.</summary>
+    private bool Plate(Rect r, string text, bool on, float px, bool dim = false)
     {
         var e = Event.current;
         var hit = e.type == EventType.MouseDown && r.Contains(e.mousePosition);
         if (e.type == EventType.Repaint)
         {
-            GUI.color = on ? Gold : new Color(0.22F, 0.17F, 0.11F, 1F);
-            GUI.DrawTexture(r, texWhite);
-            Frame(r, Gold, Mathf.Max(2, Screen.height * 0.003F));
-            GUI.color = on ? new Color(0.1F, 0.07F, 0.03F) : Color.white;
-            var st = style ?? btnStyle;
-            var old = st.normal.textColor;
-            st.normal.textColor = GUI.color;
             GUI.color = Color.white;
-            GUI.Label(r, text, st);
-            st.normal.textColor = old;
+            skin.Frame(on ? skin.PlateOn : skin.Plate, r);
+            var inset = Mathf.Min(r.height * 0.28F, 22F);
+            skin.Text(new Rect(r.x + inset, r.y, r.width - 2 * inset, r.height), text, px, TextAnchor.MiddleCenter, dim ? Ink.Dim : Ink.Bone);
         }
         if (hit) { e.Use(); return true; }
         return false;
@@ -480,27 +541,26 @@ public sealed partial class RekkrApp
     {
         float W = Screen.width, H = Screen.height;
         // Top centre, between the menu button (left) and quick save/load + map (right).
-        var bar = new Rect(W * 0.13F, H * 0.02F, W * 0.54F, H * 0.2F);
+        var bar = new Rect(W * 0.13F, H * 0.02F, W * 0.54F, H * 0.22F);
         input.EditToolbar = bar;
-        GUI.color = new Color(0.09F, 0.07F, 0.05F, 0.95F);
-        GUI.DrawTexture(bar, texWhite);
-        Frame(bar, Gold, Mathf.Max(2, H * 0.004F));
+        GUI.color = Color.white;
+        skin.Frame(skin.Panel, bar);
         var bh = H * 0.085F;
-        var y = bar.y + H * 0.018F;
-        var x = bar.x + W * 0.012F;
-        if (FlatButton(new Rect(x, y, bh, bh), "–")) input.ScaleSelected(-0.1F);
-        GUI.Label(new Rect(x + bh, y, W * 0.13F, bh), Mix(Loc.T("size"), Mathf.RoundToInt(input.SelectedScale * 100) + "%"), smallStyle);
-        if (FlatButton(new Rect(x + bh + W * 0.13F, y, bh, bh), "+")) input.ScaleSelected(0.1F);
-        if (FlatButton(new Rect(bar.xMax - W * 0.012F - W * 0.215F, y, W * 0.1F, bh), Loc.T("reset")))
+        var y = bar.y + H * 0.03F;
+        var x = bar.x + W * 0.03F;
+        if (Plate(new Rect(x, y, bh, bh), "-", false, PxRow)) input.ScaleSelected(-0.1F);
+        skin.Text(new Rect(x + bh, y, W * 0.12F, bh), Mix(Loc.T("size"), Mathf.RoundToInt(input.SelectedScale * 100) + "%"), PxSmall, TextAnchor.MiddleCenter, Ink.Bone);
+        if (Plate(new Rect(x + bh + W * 0.12F, y, bh, bh), "+", false, PxRow)) input.ScaleSelected(0.1F);
+        if (Plate(new Rect(bar.xMax - W * 0.03F - W * 0.215F, y, W * 0.1F, bh), Loc.T("reset"), false, PxSmall))
         {
             RekkrSettings.Layout.Clear();
         }
-        if (FlatButton(new Rect(bar.xMax - W * 0.012F - W * 0.1F, y, W * 0.1F, bh), Loc.T("done"), true))
+        if (Plate(new Rect(bar.xMax - W * 0.03F - W * 0.1F, y, W * 0.1F, bh), Loc.T("done"), true, PxSmall))
         {
             input.EditMode = false;
             RekkrSettings.Save();
         }
-        GUI.Label(new Rect(bar.x, bar.y + H * 0.115F, bar.width, H * 0.07F), Loc.T("editor_hint"), smallStyle);
+        skin.Text(new Rect(bar.x + W * 0.02F, bar.y + H * 0.13F, bar.width - W * 0.04F, H * 0.06F), Loc.T("editor_hint"), PxHint, TextAnchor.MiddleCenter, Ink.Dim);
         GUI.color = Color.white;
     }
 }

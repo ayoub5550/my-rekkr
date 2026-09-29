@@ -12,7 +12,7 @@ namespace ManagedDoom.UnityPort
     {
         None, Stick, Look, Fire, Use, WeaponNext, WeaponPrev, Map, Menu, Run,
         Up, Down, Left, Right, Ok, Back, Settings,
-        QuickSave, QuickLoad, Continue, Slot
+        QuickSave, QuickLoad, Continue, Slot, Jump, MenuTap
     }
 
     /// <summary>One on-screen control (circle), in GUI pixel coordinates (y down).</summary>
@@ -46,6 +46,16 @@ namespace ManagedDoom.UnityPort
         public bool StickActive;
         private int stickFinger = -1;
 
+        // dev4 free look: view pitch in 200-line units (up = positive), applied every frame.
+        private float pitch;
+        public float Pitch => pitch;
+        public int PitchInt => Mathf.Clamp(Mathf.RoundToInt(pitch), -TicCmdExt.MaxPitch, TicCmdExt.MaxPitch);
+        public void CenterView() { pitch = 0; }
+        private float lastLookTap = -10;
+        private float stickReturn;     // knob ease back to the centre after release (s)
+        private Vector2 stickReleaseKnob;
+        public float AutoPitch;        // autopilot: pitch units per second
+
         private float turnPixels;      // accumulated horizontal swipe since last tic
         private float turnCarry;
         private int weaponRequest = -1;
@@ -67,7 +77,7 @@ namespace ManagedDoom.UnityPort
             this.app = app;
             foreach (Ctl c in Enum.GetValues(typeof(Ctl)))
             {
-                if (c == Ctl.None || c == Ctl.Stick || c == Ctl.Look || c == Ctl.Slot) continue;
+                if (c == Ctl.None || c == Ctl.Stick || c == Ctl.Look || c == Ctl.Slot || c == Ctl.MenuTap) continue;
                 buttons[c] = new TouchButton { Id = c, Icon = IconFor(c) };
             }
             runToggle = config.game_alwaysrun;
@@ -94,6 +104,7 @@ namespace ManagedDoom.UnityPort
                 case Ctl.QuickSave: return "qsave";
                 case Ctl.QuickLoad: return "qload";
                 case Ctl.Continue: return "play";
+                case Ctl.Jump: return "jump";
             }
             return null;
         }
@@ -125,13 +136,14 @@ namespace ManagedDoom.UnityPort
 
             foreach (var b in buttons.Values) b.Visible = false;
 
-            // Right cluster.
+            // Right cluster (dev4: + JUMP above USE, arc around ATTACK).
             float fr = 78 * u;
             var fire = Place(Ctl.Fire, new Vector2(W - m - fr - 22 * u, H - m - fr - 40 * u), fr, inGame);
-            Place(Ctl.Use, fire.Center + new Vector2(-fr - 70 * u, 28 * u), 55 * u, inGame);
-            Place(Ctl.WeaponNext, fire.Center + new Vector2(18 * u, -fr - 62 * u), 44 * u, inGame);
-            Place(Ctl.WeaponPrev, fire.Center + new Vector2(-fr - 60 * u, -fr - 30 * u), 44 * u, inGame);
-            Place(Ctl.Run, fire.Center + new Vector2(-fr - 150 * u, -40 * u), 40 * u, inGame);
+            Place(Ctl.Use, fire.Center + new Vector2(-fr - 72 * u, 30 * u), 55 * u, inGame);
+            Place(Ctl.Jump, fire.Center + new Vector2(-fr - 34 * u, -fr - 70 * u), 52 * u, inGame && RekkrSettings.Jump);
+            Place(Ctl.WeaponNext, fire.Center + new Vector2(40 * u, -fr - 78 * u), 44 * u, inGame);
+            Place(Ctl.WeaponPrev, fire.Center + new Vector2(-fr - 140 * u, -fr - 30 * u), 42 * u, inGame);
+            Place(Ctl.Run, fire.Center + new Vector2(-fr - 205 * u, -20 * u), 40 * u, inGame);
 
             // Top corners: menu left; map + quick save/load right.
             Place(Ctl.Menu, new Vector2(m + 40 * u, m + 40 * u), 36 * u, !MenuMode);
@@ -185,7 +197,14 @@ namespace ManagedDoom.UnityPort
             if (!StickActive)
             {
                 StickCenter = StickHome;
-                StickKnob = StickHome + new Vector2(AutoStick.x, -AutoStick.y) * StickRadius;
+                var target = StickHome + new Vector2(AutoStick.x, -AutoStick.y) * StickRadius;
+                if (stickReturn > 0)
+                {
+                    stickReturn = Mathf.Max(0, stickReturn - Time.unscaledDeltaTime);
+                    var k = stickReturn / 0.08F;
+                    StickKnob = Vector2.Lerp(target, StickHome + stickReleaseKnob, k * k);
+                }
+                else StickKnob = target;
             }
         }
 
@@ -245,11 +264,22 @@ namespace ManagedDoom.UnityPort
                 var yaw = grav.sqrMagnitude > 0.01F ? UnityEngine.Vector3.Dot(rate, -grav.normalized) : rate.x;
                 if (RekkrSettings.GyroInvert) yaw = -yaw;
                 if (Mathf.Abs(yaw) > 0.02F) gyroRadians += yaw * Time.unscaledDeltaTime;
+                // dev4: pitch = rotation around the screen's horizontal axis (device ±Y in landscape).
+                if (RekkrSettings.FreeLook)
+                {
+                    var right = Screen.orientation == ScreenOrientation.LandscapeRight ? UnityEngine.Vector3.up : UnityEngine.Vector3.down;
+                    var pr = UnityEngine.Vector3.Dot(rate, right);
+                    if (RekkrSettings.GyroInvert) pr = -pr;
+                    if (Mathf.Abs(pr) > 0.02F) AddPitch(pr * Time.unscaledDeltaTime * Mathf.Rad2Deg * PitchUnitsPerDegree * (RekkrSettings.GyroSensitivity / 4F));
+                }
             }
+            if (AutoPitch != 0) AddPitch(AutoPitch * Time.unscaledDeltaTime);
+            if (!RekkrSettings.FreeLook) pitch = 0;
             // Autopilot turning is fed like a finger swipe (640 units per tic at AutoTurn = 1), so
             // Test Lab runs exercise the same per-frame smooth-look path as a real player.
             if (AutoTurn != 0) turnPixels -= AutoTurn * 640F * 35F * Time.unscaledDeltaTime / SwipeUnitsPerPixel;
             if (AutoFire) buttons[Ctl.Fire].Held = true;
+            if (AutoJump) buttons[Ctl.Jump].Held = true;
             if (AutoUse) buttons[Ctl.Use].Held = true;
 
             // Menu key auto-repeat for held arrows.
@@ -281,15 +311,20 @@ namespace ManagedDoom.UnityPort
                 lastPos[id] = p;
                 if (ctl == Ctl.Stick)
                 {
-                    var d = p - StickCenter;
-                    // Floating stick: drag the base along if the finger runs past the rim.
-                    if (d.magnitude > StickRadius) StickCenter += d - d.normalized * StickRadius;
+                    // dev4: the base never follows the finger any more (fixed at home, or where the
+                    // finger first landed in floating mode); the knob is clamped to the rim.
                     StickKnob = StickCenter + Vector2.ClampMagnitude(p - StickCenter, StickRadius);
                 }
-                else if (ctl == Ctl.Look || ctl == Ctl.Fire)
+                else if (ctl == Ctl.Look || ctl == Ctl.Fire || ctl == Ctl.Jump)
                 {
-                    // Aim while firing: the attack finger also turns.
+                    // Aim while firing (or jumping): that finger also turns and looks up/down.
                     turnPixels += p.x - last.x;
+                    if (RekkrSettings.FreeLook)
+                    {
+                        var dy = last.y - p.y;               // finger up = look up
+                        if (RekkrSettings.InvertLook) dy = -dy;
+                        AddPitch(dy * PitchUnitsPerPixel);
+                    }
                 }
                 if (ended) Release(id);
             }
@@ -309,12 +344,14 @@ namespace ManagedDoom.UnityPort
             if (cont.Visible && cont.PillRect.Contains(p)) return Ctl.Continue;
             if (best != null) return best.Id;
             if (TitleMode) return Ctl.Ok; // tap anywhere on the title to open the menu
-            if (MenuMode) return Ctl.None;
+            if (MenuMode) return app.MenuTapAt(p, false) ? Ctl.MenuTap : Ctl.None;   // dev4: tap a menu line
             // Tap a weapon number on the status bar / fullscreen HUD to select it.
             var slot = app.ArmsSlotAt(p);
             if (slot >= 0) { pendingSlot = slot; return Ctl.Slot; }
             bool leftSide = p.x < Screen.width * 0.45F;
             if (leftHanded) leftSide = !leftSide;
+            // dev4 fixed stick: only touches near the stick grab it; the rest of the left side looks.
+            if (leftSide && RekkrSettings.StickMode == 0 && (p - StickHome).magnitude > StickRadius * 2.1F) return Ctl.Look;
             return leftSide ? Ctl.Stick : Ctl.Look;
         }
 
@@ -325,9 +362,26 @@ namespace ManagedDoom.UnityPort
                 case Ctl.Stick:
                     stickFinger = finger;
                     StickActive = true;
-                    StickCenter = p;
-                    StickKnob = p;
+                    stickReturn = 0;
+                    if (RekkrSettings.StickMode == 0)
+                    {
+                        // Fixed: the base stays at home; the knob jumps to the finger (clamped).
+                        StickCenter = StickHome;
+                        StickKnob = StickHome + Vector2.ClampMagnitude(p - StickHome, StickRadius);
+                    }
+                    else
+                    {
+                        StickCenter = p;
+                        StickKnob = p;
+                    }
                     break;
+                case Ctl.Look:
+                    // Double-tap the look area: centre the view vertically.
+                    if (Time.unscaledTime - lastLookTap < 0.3F && RekkrSettings.FreeLook) { pitch = 0; lastLookTap = -10; }
+                    else lastLookTap = Time.unscaledTime;
+                    break;
+                case Ctl.Jump: Flash(ctl); break;
+                case Ctl.MenuTap: app.MenuTapAt(p, true); break;
                 case Ctl.WeaponNext: weaponRequest = NextWeapon(+1); Flash(ctl); break;
                 case Ctl.WeaponPrev: weaponRequest = NextWeapon(-1); Flash(ctl); break;
                 case Ctl.Run: runToggle = !runToggle; config.game_alwaysrun = runToggle; Flash(ctl); break;
@@ -365,7 +419,9 @@ namespace ManagedDoom.UnityPort
                 if (ctl == Ctl.Stick && finger == stickFinger)
                 {
                     StickActive = false; stickFinger = -1;
-                    StickCenter = StickHome; StickKnob = StickHome;
+                    stickReleaseKnob = Vector2.ClampMagnitude(StickKnob - StickCenter, StickRadius);
+                    stickReturn = 0.08F;
+                    StickCenter = StickHome;
                 }
                 if (ctl == repeatCtl) repeatCtl = Ctl.None;
             }
@@ -380,6 +436,7 @@ namespace ManagedDoom.UnityPort
 
         public bool AutoFire;
         public bool AutoUse;
+        public bool AutoJump;
         private int pendingSlot = -1;
         private int slotRequest = -1;
 
@@ -536,6 +593,12 @@ namespace ManagedDoom.UnityPort
         /// interpolated angle, which is smooth for constant-rate turning).</summary>
         public bool LastTicKeyTurn { get; private set; }
 
+        // dev4 free look. Pitch units are 200-line screen units (slope = pitch/160). Near the centre one
+        // degree ≈ 160·π/180 ≈ 2.8 units; swipe speed matches ~60 % of the horizontal look speed.
+        private const float PitchUnitsPerDegree = 2.79F;
+        private float PitchUnitsPerPixel => 180F / (0.30F * Screen.width) * PitchUnitsPerDegree * 0.6F * (RekkrSettings.LookSensitivity / 5F);
+        private void AddPitch(float d) { pitch = Mathf.Clamp(pitch + d, -TicCmdExt.MaxPitch, TicCmdExt.MaxPitch); }
+
         private float SwipeUnitsPerPixel => 32768F / (0.30F * Screen.width) * (RekkrSettings.LookSensitivity / 5F);
         private static float GyroUnitsPerRadian => (65536F / (2F * Mathf.PI)) * (RekkrSettings.GyroSensitivity / 4F);
 
@@ -556,11 +619,18 @@ namespace ManagedDoom.UnityPort
             cmd.Clear();
             var speed = runToggle ? 1 : 0;
 
-            // Analog stick (touch or autopilot), x = strafe right, y = forward; small dead zone.
+            // Analog stick (touch or autopilot), x = strafe right, y = forward.
+            // dev4: radial dead zone 12 %, full speed at 92 %, mild curve for fine walking.
             var s = StickActive
                 ? new Vector2((StickKnob.x - StickCenter.x) / Mathf.Max(1, StickRadius), (StickCenter.y - StickKnob.y) / Mathf.Max(1, StickRadius))
                 : AutoStick;
-            if (s.magnitude < 0.12F) s = Vector2.zero;
+            var mag = s.magnitude;
+            if (mag < 0.12F) s = Vector2.zero;
+            else if (StickActive)
+            {
+                var t = Mathf.Clamp01((mag - 0.12F) / (0.92F - 0.12F));
+                s = s / mag * Mathf.Pow(t, 1.35F);
+            }
 
             var forward = Mathf.RoundToInt(s.y * PlayerBehavior.ForwardMove[speed] * 1.05F);
             var side = Mathf.RoundToInt(s.x * PlayerBehavior.SideMove[speed] * 1.1F);
@@ -590,7 +660,18 @@ namespace ManagedDoom.UnityPort
             cmd.AngleTurn += (short)turnInt;
 
             if (buttons[Ctl.Fire].Held || Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.JoystickButton5)) cmd.Buttons |= TicCmdButtons.Attack;
-            if (buttons[Ctl.Use].Held || Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.JoystickButton2)) cmd.Buttons |= TicCmdButtons.Use;
+            if (buttons[Ctl.Use].Held || Input.GetKey(KeyCode.F) || Input.GetKey(KeyCode.JoystickButton2)) cmd.Buttons |= TicCmdButtons.Use;
+
+            // dev4 extensions (never in demos): free-look pitch, aim mode, jump.
+            if (RekkrSettings.FreeLook)
+            {
+                cmd.LookPitch = (short)PitchInt;
+                if (!RekkrSettings.AutoAim) cmd.Ext |= TicCmdExt.NoAutoAim;
+            }
+            if (RekkrSettings.Jump && (buttons[Ctl.Jump].Held || Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.JoystickButton0)))
+            {
+                cmd.Ext |= TicCmdExt.Jump;
+            }
 
             for (var i = 0; i < 7; i++)
             {
@@ -617,7 +698,7 @@ namespace ManagedDoom.UnityPort
 
         public void Reset()
         {
-            turnPixels = 0; turnCarry = 0; weaponRequest = -1; slotRequest = -1; gyroRadians = 0;
+            turnPixels = 0; turnCarry = 0; weaponRequest = -1; slotRequest = -1; gyroRadians = 0; pitch = 0;
         }
 
         public void GrabMouse() { }

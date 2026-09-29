@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -207,7 +207,14 @@ namespace ManagedDoom.Video
         /// sets it only for a live game (never for demos).</summary>
         public Angle? LocalViewTurn;
 
+        /// <summary>my-rekkr dev4 free look: view pitch in 200-line units for this frame (the app sets it
+        /// every frame from touch/gyro input; 0 for demos and the classic view).</summary>
+        public int LocalViewPitch;
+
         public int RenderThreads => threeD.ThreadCount;
+
+        /// <summary>my-rekkr dev4: 3D view window in frame pixels (crosshair position).</summary>
+        public (int x, int y, int w, int h) ViewWindow => threeD.WindowRect;
 
         /// <summary>Stops the render worker threads (call when the renderer is replaced).</summary>
         public void Dispose() => threeD.Dispose();
@@ -238,8 +245,10 @@ namespace ManagedDoom.Video
                         screen.LightData = new ushort[screen.Data.Length];
                     }
                     trueColorFrame = ThreeDRenderer.TrueColor;
+                    ThreeDRenderer.ViewPitch = displayPlayer == consolePlayer ? LocalViewPitch : 0;
                     threeD.Render(displayPlayer, frameFrac,
                         displayPlayer == consolePlayer && !game.Paused ? LocalViewTurn : null);
+                    ThreeDRenderer.ViewPitch = 0;
                     if (threeD.WindowSize < 8)
                     {
                         RenderStatusBar(consolePlayer);

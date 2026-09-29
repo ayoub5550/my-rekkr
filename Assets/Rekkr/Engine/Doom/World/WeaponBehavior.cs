@@ -1,4 +1,4 @@
-﻿//
+//
 // Copyright (C) 1993-1996 Id Software, Inc.
 // Copyright (C) 2019-2020 Nobuaki Tanaka
 //
@@ -441,6 +441,14 @@ namespace ManagedDoom
 
             // See which target is to be aimed at.
             var angle = mo.Angle;
+            var player = mo.Player;
+
+            // my-rekkr dev4: autoaim off -> shots go exactly where the crosshair points.
+            if (player != null && player.NoAutoAim)
+            {
+                currentBulletSlope = player.PitchSlope;
+                return;
+            }
 
             currentBulletSlope = hs.AimLineAttack(mo, angle, Fixed.FromInt(1024));
 
@@ -453,6 +461,12 @@ namespace ManagedDoom
                     angle -= new Angle(2 << 26);
                     currentBulletSlope = hs.AimLineAttack(mo, angle, Fixed.FromInt(1024));
                 }
+            }
+
+            // my-rekkr dev4: no autoaim target -> use the free-look pitch (0 in demos = vanilla).
+            if (hs.LineTarget == null && player != null && player.LookPitch != 0)
+            {
+                currentBulletSlope = player.PitchSlope;
             }
         }
 
