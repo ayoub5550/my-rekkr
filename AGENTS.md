@@ -2,6 +2,10 @@
 
 Last updated: 2026-09-29 (v0.2.0, dev2).
 
+> **dev3 (v0.3.0) is in progress on branch `feat/dev3`.** The full plan, specs and the live status table
+> are in [`docs/DEV3.md`](docs/DEV3.md). If the owner says «أكمل dev3» ("continue dev3"), follow that file:
+> take the first stage that is not ✅ and finish it.
+
 ## 1. Goal and status
 
 REKKR v1.17 (Revae, CC BY-NC 4.0) on Android via **Unity 2022.3.62f3** (`96770f904ca7`), with the
