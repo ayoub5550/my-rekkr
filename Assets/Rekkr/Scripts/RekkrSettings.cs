@@ -35,6 +35,36 @@ namespace ManagedDoom.UnityPort
         public static bool Crt;                  // dev3 post: CRT scanlines
         public static bool SideFill = true;      // dev3: blurred sides on centred 4:3 screens
         public static readonly int[] Resolutions = { 400, 600, 800, 1000 };
+        public static int GfxPreset = 2;         // dev3: 0 Classic, 1 Balanced, 2 Enhanced, 3 Custom
+
+        // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads
+        private static readonly (int res, bool dyn, bool light, int bloom, int vig, int grade, bool sharp, bool crt, bool side, int threads)[] Presets =
+        {
+            (400, false, false, 0, 0, 0, false, false, false, 1),   // Classic: pixel-identical to v0.2.0
+            (600, true, true, 0, 0, 0, true, false, true, 0),       // Balanced
+            (800, true, true, 1, 15, 1, true, false, true, 0),      // Enhanced
+        };
+
+        public static void ApplyPreset(int p)
+        {
+            var v = Presets[System.Math.Clamp(p, 0, 2)];
+            Resolution = v.res; DynamicRes = v.dyn; SmoothLighting = v.light; Bloom = v.bloom; Vignette = v.vig;
+            ColorGrade = v.grade; Sharpen = v.sharp; Crt = v.crt; SideFill = v.side; RenderThreads = v.threads;
+            GfxPreset = p;
+        }
+
+        /// <summary>The preset the current values match, or 3 (Custom).</summary>
+        public static int MatchPreset()
+        {
+            for (var p = 0; p < Presets.Length; p++)
+            {
+                var v = Presets[p];
+                if (Resolution == v.res && DynamicRes == v.dyn && SmoothLighting == v.light && Bloom == v.bloom &&
+                    Vignette == v.vig && ColorGrade == v.grade && Sharpen == v.sharp && Crt == v.crt && SideFill == v.side &&
+                    (p == 0) == (RenderThreads == 1)) return p;
+            }
+            return 3;
+        }
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -72,6 +102,9 @@ namespace ManagedDoom.UnityPort
             Sharpen = PlayerPrefs.GetInt("gfx_sharpen", 1) == 1;
             Crt = PlayerPrefs.GetInt("gfx_crt", 0) == 1;
             SideFill = PlayerPrefs.GetInt("gfx_sidefill", 1) == 1;
+            // First start of 0.3.0 (new install or update from 0.2.0): pick a preset for the device.
+            if (!PlayerPrefs.HasKey("gfx_preset")) ApplyPreset(SystemInfo.processorCount >= 6 ? 2 : 1);
+            else GfxPreset = PlayerPrefs.GetInt("gfx_preset", 2);
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -115,6 +148,7 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("gfx_sharpen", Sharpen ? 1 : 0);
             PlayerPrefs.SetInt("gfx_crt", Crt ? 1 : 0);
             PlayerPrefs.SetInt("gfx_sidefill", SideFill ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_preset", GfxPreset);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

@@ -59,6 +59,18 @@ namespace ManagedDoom.UnityPort
             }
         }
 
+        /// <summary>dev3: drop all cached renderers (e.g. render-thread count changed) and recreate.</summary>
+        public void Rebuild()
+        {
+            var old = renderer;
+            var ws = old.WindowSize; var dm = old.DisplayMessage; var gamma = old.GammaCorrectionLevel;
+            foreach (var e in cache.Values) { e.r.Dispose(); UnityEngine.Object.Destroy(e.t); }
+            cache.Clear();
+            renderer = null;
+            Create(wideWidth, lines);
+            renderer.WindowSize = ws; renderer.DisplayMessage = dm; renderer.GammaCorrectionLevel = gamma;
+        }
+
         /// <summary>Change the frame width (widescreen on/off, rotation). Returns true if it changed.</summary>
         public bool SetWideWidth(int wide) => SetFrame(wide, lines);
 

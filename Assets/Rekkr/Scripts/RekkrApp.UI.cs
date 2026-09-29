@@ -209,11 +209,11 @@ public sealed partial class RekkrApp
         GUI.Label(new Rect(panel.x, panel.y + H * 0.01F, panel.width, H * 0.08F), Loc.T("settings"), titleStyle);
 
         // Tabs (right-to-left order in Arabic).
-        string[] tabs = { Loc.T("tab_controls"), Loc.T("tab_motion"), Loc.T("tab_display") };
-        var tw = (panel.width - W * 0.04F) / 3F;
-        for (var i = 0; i < 3; i++)
+        string[] tabs = { Loc.T("tab_controls"), Loc.T("tab_motion"), Loc.T("tab_display"), Loc.T("tab_graphics") };
+        var tw = (panel.width - W * 0.04F) / 4F;
+        for (var i = 0; i < 4; i++)
         {
-            var slot = Loc.Arabic ? 2 - i : i;
+            var slot = Loc.Arabic ? 3 - i : i;
             var tr = new Rect(panel.x + W * 0.02F + slot * tw + W * 0.004F, panel.y + H * 0.1F, tw - W * 0.008F, H * 0.075F);
             if (FlatButton(tr, tabs[i], settingsTab == i, smallStyle)) settingsTab = i;
         }
@@ -224,7 +224,8 @@ public sealed partial class RekkrApp
         {
             case 0: DrawControlsTab(); break;
             case 1: DrawMotionTab(); break;
-            default: DrawDisplayTab(); break;
+            case 2: DrawDisplayTab(); break;
+            default: DrawGraphicsTab(); break;
         }
 
         var done = new Rect(panel.center.x - W * 0.08F, panel.yMax - H * 0.115F, W * 0.16F, H * 0.08F);
@@ -286,6 +287,70 @@ public sealed partial class RekkrApp
             SetMusicHQ(!RekkrSettings.MusicHQ);
         }
         if (Cycle(Loc.T("lang"), Loc.Arabic ? "العربية" : "ENGLISH", true)) SetArabic(!Loc.Arabic);
+    }
+
+    // dev3 stage 9: Graphics tab (two pages: main + effects; the panel fits 6 rows per page).
+    private int gfxPage;
+
+    private void DrawGraphicsTab()
+    {
+        if (gfxPage == 0)
+        {
+            var preset = RekkrSettings.GfxPreset;
+            if (Cycle(Loc.T("preset"), Loc.T("preset_" + preset)))
+            {
+                ApplyPreset(preset >= 2 ? 0 : preset + 1);   // Classic -> Balanced -> Enhanced -> Classic
+            }
+            var resIdx = System.Array.IndexOf(RekkrSettings.Resolutions, RekkrSettings.Resolution);
+            if (Cycle(Loc.T("resolution"), RekkrSettings.Resolution + (RekkrSettings.DynamicRes ? "  (" + video.Lines + ")" : ""), true))
+            {
+                RekkrSettings.Resolution = RekkrSettings.Resolutions[(resIdx + 1) % RekkrSettings.Resolutions.Length];
+                MarkCustom();
+            }
+            var dyn = Toggle(Loc.T("dynres"), RekkrSettings.DynamicRes);
+            if (dyn != RekkrSettings.DynamicRes) { RekkrSettings.DynamicRes = dyn; MarkCustom(); }
+            var sl = Toggle(Loc.T("smooth_light"), RekkrSettings.SmoothLighting);
+            if (sl != RekkrSettings.SmoothLighting) { RekkrSettings.SmoothLighting = sl; MarkCustom(); }
+            var sp = Toggle(Loc.T("stable_perf"), RekkrSettings.StablePerf);
+            if (sp != RekkrSettings.StablePerf) { RekkrSettings.StablePerf = sp; PerfMode.SetSustained(sp); }
+            if (ActionRow(Loc.T("gfx_more"), Loc.T("gfx_open"))) gfxPage = 1;
+        }
+        else
+        {
+            if (Cycle(Loc.T("bloom"), Loc.T("lvl_" + RekkrSettings.Bloom))) { RekkrSettings.Bloom = (RekkrSettings.Bloom + 1) % 4; MarkCustom(); }
+            if (Cycle(Loc.T("grade"), Loc.T("grade_" + RekkrSettings.ColorGrade))) { RekkrSettings.ColorGrade = (RekkrSettings.ColorGrade + 1) % 3; MarkCustom(); }
+            var v = Stepper(Loc.T("vignette"), RekkrSettings.Vignette, 0, 30, 5, "%");
+            if (v != RekkrSettings.Vignette) { RekkrSettings.Vignette = v; MarkCustom(); }
+            var sh = Toggle(Loc.T("sharpen"), RekkrSettings.Sharpen);
+            if (sh != RekkrSettings.Sharpen) { RekkrSettings.Sharpen = sh; MarkCustom(); }
+            var crt = Toggle(Loc.T("crt"), RekkrSettings.Crt);
+            if (crt != RekkrSettings.Crt) { RekkrSettings.Crt = crt; MarkCustom(); }
+            // Side fill + back share the last row: back button replaces the "Effects" row of page 1.
+            var sf = Toggle(Loc.T("sidefill"), RekkrSettings.SideFill);
+            if (sf != RekkrSettings.SideFill) { RekkrSettings.SideFill = sf; MarkCustom(); }
+            var back = new Rect(panel.x + panel.width * 0.06F, panel.yMax - H_ * 0.115F, panel.width * 0.16F, H_ * 0.08F);
+            if (FlatButton(back, Loc.T("gfx_back"))) gfxPage = 0;
+        }
+    }
+
+    private static float H_ => Screen.height;
+
+    private void MarkCustom()
+    {
+        RekkrSettings.GfxPreset = RekkrSettings.MatchPreset();
+    }
+
+    /// <summary>Applies a graphics preset (0 Classic = exactly v0.2.0, 1 Balanced, 2 Enhanced).</summary>
+    public void ApplyPreset(int preset)
+    {
+        var threadsBefore = RekkrSettings.RenderThreads;
+        RekkrSettings.ApplyPreset(preset);
+        if (RekkrSettings.RenderThreads != threadsBefore)
+        {
+            ManagedDoom.Video.ThreeDRendererPool.Threads = RekkrSettings.RenderThreads;
+            video.Rebuild();
+            Doom?.ResetWipe();
+        }
     }
 
     /// <summary>0 = status bar (screen size 7), 1 = fullscreen HUD (9), 2 = no HUD (8).</summary>

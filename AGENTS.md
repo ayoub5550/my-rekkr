@@ -2,7 +2,8 @@
 
 Last updated: 2026-09-29 (v0.2.0, dev2).
 
-> **dev3 (v0.3.0) is in progress on branch `feat/dev3`.** The full plan, specs and the live status table
+> **dev3 (v0.3.0) is in progress on branch `feat/dev3`** (stages 0–10 done 2026-09-29, stage 11 device
+> test + release pending). The full plan, specs and the live status table
 > are in [`docs/DEV3.md`](docs/DEV3.md). If the owner says «أكمل dev3» ("continue dev3"), follow that file:
 > take the first stage that is not ✅ and finish it.
 

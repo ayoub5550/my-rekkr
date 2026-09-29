@@ -53,6 +53,8 @@ public sealed partial class RekkrApp
         testGcStart = GC.CollectionCount(0);
         Log($"autopilot scenario {testScenario} frame={video.FrameWidth}x{video.FrameHeight} rateTarget={DisplayRate.Target} rates={string.Join("/", DisplayRate.Rates)} gyro={SystemInfo.supportsGyroscope}");
         if (testScenario == 2) yield return Scenario2();
+        else if (testScenario == 3) yield return Scenario3();
+        else if (testScenario == 4) yield return Scenario4();
         else yield return Scenario1();
         FinishTestLoop();
     }
@@ -61,23 +63,26 @@ public sealed partial class RekkrApp
     {
         SetArabic(false);
         HudMode = 0;
-        yield return Wait(2.5F); Shot("00_titlepic");                // centred 4:3 title (side-fill)
-        yield return Wait(6.5F); Shot("01_title");
-        yield return TapSeq(Ctl.Ok, 1.0F); Shot("02_menu");           // tap to play -> main menu
-        yield return TapSeq(Ctl.Settings, 1.4F); Shot("03_settings_controls");
-        settingsTab = 1; yield return Wait(1.4F); Shot("04_settings_motion");
-        settingsTab = 2; yield return Wait(1.6F); Shot("05_settings_display");
+        yield return Wait(2.5F); Shot("00_titlepic"); yield return null;                // centred 4:3 title (side-fill)
+        yield return Wait(6.5F); Shot("01_title"); yield return null;
+        yield return TapSeq(Ctl.Ok, 1.0F); Shot("02_menu"); yield return null;           // tap to play -> main menu
+        yield return TapSeq(Ctl.Settings, 1.4F); Shot("03_settings_controls"); yield return null;
+        settingsTab = 1; yield return Wait(1.4F); Shot("04_settings_motion"); yield return null;
+        settingsTab = 2; yield return Wait(1.6F); Shot("05_settings_display"); yield return null;
+        settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("05b_settings_graphics"); yield return null;
+        gfxPage = 1; yield return Wait(1.4F); Shot("05c_settings_effects"); yield return null;
+        gfxPage = 0;
         settingsTab = 0; yield return Wait(0.6F);
-        OpenEditor(); yield return Wait(1.4F); Shot("06_editor");
+        OpenEditor(); yield return Wait(1.4F); Shot("06_editor"); yield return null;
         input.ScaleSelected(0.3F); yield return Wait(0.8F);
         input.EditSelected = Ctl.QuickSave;
-        RekkrSettings.Layout[Ctl.QuickSave] = (new Vector2(0.5F, 0.55F), 1.2F); yield return Wait(1.0F); Shot("07_editor_moved");
+        RekkrSettings.Layout[Ctl.QuickSave] = (new Vector2(0.5F, 0.55F), 1.2F); yield return Wait(1.0F); Shot("07_editor_moved"); yield return null;
         RekkrSettings.Layout.Clear(); yield return Wait(0.6F);
         input.EditMode = false; yield return Wait(0.5F);
         settingsOpen = false;
         yield return Wait(0.6F);
         yield return TapSeq(Ctl.Ok, 0.9F);                              // NEW GAME
-        yield return TapSeq(Ctl.Ok, 0.9F); Shot("08_episode");          // episode 1
+        yield return TapSeq(Ctl.Ok, 0.9F); Shot("08_episode"); yield return null;          // episode 1
         yield return TapSeq(Ctl.Down, 0.5F);
         yield return TapSeq(Ctl.Up, 0.7F);
         yield return TapSeq(Ctl.Ok, 1.2F);                              // skill (default)
@@ -101,7 +106,7 @@ public sealed partial class RekkrApp
         };
         yield return Play(98F, events);
         Log($"haptic pulses={Haptics.Count}");
-        yield return TapSeq(Ctl.Menu, 1.5F); Shot("20_ingame_menu");
+        yield return TapSeq(Ctl.Menu, 1.5F); Shot("20_ingame_menu"); yield return null;
         yield return TapSeq(Ctl.Back, 1.0F);
     }
 
@@ -109,22 +114,25 @@ public sealed partial class RekkrApp
     {
         SetArabic(true);
         HudMode = 1;
-        yield return Wait(8F); Shot("01_title_ar");
+        yield return Wait(8F); Shot("01_title_ar"); yield return null;
         if (canContinue)
         {
             yield return TapSeq(Ctl.Continue, 1.0F);
             yield return Play(10F, null);
             Log("continue state=" + Doom.State + " level=" + InLevel);
-            Shot("02_continued");
+            Shot("02_continued"); yield return null;
             yield return TapSeq(Ctl.Menu, 1.0F);
         }
         else
         {
             yield return TapSeq(Ctl.Ok, 1.0F);
         }
-        yield return TapSeq(Ctl.Settings, 1.5F); Shot("03_settings_ar");
+        yield return TapSeq(Ctl.Settings, 1.5F); Shot("03_settings_ar"); yield return null;
         settingsTab = 1; yield return Wait(1.3F);
-        settingsTab = 2; yield return Wait(1.5F); Shot("04_settings_ar_display");
+        settingsTab = 2; yield return Wait(1.5F); Shot("04_settings_ar_display"); yield return null;
+        settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("04b_settings_ar_graphics"); yield return null;
+        gfxPage = 1; yield return Wait(1.4F); Shot("04c_settings_ar_effects"); yield return null;
+        gfxPage = 0;
         settingsTab = 0; settingsOpen = false;
         yield return TapSeq(Ctl.Back, 0.8F);
 
@@ -139,6 +147,86 @@ public sealed partial class RekkrApp
         }
         SetArabic(false);
         HudMode = 0;
+    }
+
+    // ------------------------------------------------------------ dev3 scenario 3: graphics benchmark
+    // Fixed configs, 20 s each, in E1M1 and E1M7 (REKKR's biggest map), autopilot wandering + turning.
+    private static readonly (string name, int preset, int lines, bool light, bool post)[] BenchConfigs =
+    {
+        ("classic400", 0, 400, false, false),
+        ("enh600", 2, 600, true, true),
+        ("enh800", 2, 800, true, true),
+        ("enh1000", 2, 1000, true, true),
+        ("enh800_nolight", 2, 800, false, true),
+        ("enh800_nopost", 2, 800, true, false),
+        ("enh_auto", 2, 800, true, true),   // dynamic resolution on
+    };
+
+    private IEnumerator Scenario3()
+    {
+        HudMode = 0;
+        yield return Wait(4F);
+        yield return TapSeq(Ctl.Ok, 1.0F);
+        yield return TapSeq(Ctl.Back, 0.8F);
+        foreach (var map in new[] { 1, 7 })
+        {
+            Doom.NewGame(GameSkill.Easy, 1, map);
+            yield return Wait(2F);
+            foreach (var cfg in BenchConfigs)
+            {
+                ApplyPreset(cfg.preset);
+                RekkrSettings.SmoothLighting = cfg.light;
+                if (!cfg.post) { RekkrSettings.Bloom = 0; RekkrSettings.Vignette = 0; RekkrSettings.ColorGrade = 0; RekkrSettings.Sharpen = false; RekkrSettings.SideFill = false; }
+                RekkrSettings.Resolution = cfg.lines;
+                RekkrSettings.DynamicRes = cfg.name == "enh_auto";
+                SetLines(cfg.lines, "bench");
+                yield return Play(3F, null);   // warm-up (renderer creation, caches)
+                var ft = new List<float>(4000); var rt = new List<float>(4000);
+                var end = Time.unscaledTime + 20F; var switches = dynSwitches;
+                var thermalStart = ThermalStatus();
+                var play = Play(20F, null);
+                while (Time.unscaledTime < end && play.MoveNext())
+                {
+                    yield return play.Current;
+                    ft.Add(Time.unscaledDeltaTime); rt.Add(video.LastRenderMs + video.LastUploadMs);
+                }
+                ft.Sort();
+                float sum = 0; foreach (var f in ft) sum += f;
+                var (ra, rp) = Stats(rt);
+                Log($"bench map=E1M{map} cfg={cfg.name} frame={video.FrameWidth}x{video.FrameHeight} avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p50_frame_ms={ft[ft.Count / 2] * 1000:F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} render_ms_avg={ra:F2} render_ms_p99={rp:F2} dynres_switches={dynSwitches - switches} thermal={thermalStart}->{ThermalStatus()}");
+                Shot($"bench_E1M{map}_{cfg.name}"); yield return null;
+            }
+        }
+        ApplyPreset(2);
+    }
+
+    // ------------------------------------------------------------ dev3 scenario 4: long soak
+    // 20 minutes of play, a new map every 2 minutes, one log line per minute (fps, lines, memory, heat).
+    private IEnumerator Scenario4()
+    {
+        HudMode = 0;
+        yield return Wait(4F);
+        yield return TapSeq(Ctl.Ok, 1.0F);
+        yield return TapSeq(Ctl.Back, 0.8F);
+        var maps = new[] { (1, 1), (1, 7), (2, 6), (3, 6), (4, 1), (2, 3), (3, 4), (4, 9), (1, 4), (4, 7) };
+        var minute = 0;
+        foreach (var (e, m) in maps)
+        {
+            Doom.NewGame(GameSkill.Easy, e, m);
+            yield return Wait(1.5F);
+            for (var half = 0; half < 2; half++)
+            {
+                var ft = new List<float>(8000);
+                var play = Play(60F, null);
+                while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
+                float sum = 0; foreach (var f in ft) sum += f;
+                ft.Sort();
+                minute++;
+                Log($"soak minute={minute} map=E{e}M{m} lines={video.Lines} avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={(ft.Count > 0 ? ft[(int)(ft.Count * 0.99F)] * 1000 : 0):F1} mem_mb={GC.GetTotalMemory(false) / 1048576} unity_mb={UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1048576} gc0={GC.CollectionCount(0) - testGcStart} thermal={ThermalStatus()} health={Doom.Game?.World?.ConsolePlayer?.Health}");
+                if (Doom.Game?.World?.ConsolePlayer?.Health <= 0) { Doom.NewGame(GameSkill.Easy, e, m); yield return Wait(1.5F); }
+            }
+            Shot($"soak_E{e}M{m}"); yield return null;
+        }
     }
 
     /// <summary>Wander, fire and use for <paramref name="seconds"/>, running timed events.</summary>
@@ -187,7 +275,7 @@ public sealed partial class RekkrApp
                 try { events[next].a?.Invoke(); } catch (Exception e) { Log("event failed: " + e.Message); }
                 var shotName = events[next].shot;
                 next++;
-                if (shotName != null) { yield return Wait(0.8F); Shot(shotName); }
+                if (shotName != null) { yield return Wait(0.8F); Shot(shotName); yield return null; }
             }
             yield return null;
         }
