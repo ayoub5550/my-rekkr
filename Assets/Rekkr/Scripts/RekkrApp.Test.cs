@@ -61,7 +61,8 @@ public sealed partial class RekkrApp
     {
         SetArabic(false);
         HudMode = 0;
-        yield return Wait(9F); Shot("01_title");
+        yield return Wait(2.5F); Shot("00_titlepic");                // centred 4:3 title (side-fill)
+        yield return Wait(6.5F); Shot("01_title");
         yield return TapSeq(Ctl.Ok, 1.0F); Shot("02_menu");           // tap to play -> main menu
         yield return TapSeq(Ctl.Settings, 1.4F); Shot("03_settings_controls");
         settingsTab = 1; yield return Wait(1.4F); Shot("04_settings_motion");
@@ -267,7 +268,7 @@ public sealed partial class RekkrApp
         var (renderAvg, renderP99) = Stats(renderTimes);
         var (uploadAvg, uploadP99) = Stats(uploadTimes);
         var gc0 = GC.CollectionCount(0) - testGcStart;
-        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} {LookSummary()} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} lines_max={StartLines()} dynres={RekkrSettings.DynamicRes} dynres_switches={dynSwitches} threads={video.RenderThreads} smooth_light={RekkrSettings.SmoothLighting} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
+        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} {LookSummary()} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} lines_max={StartLines()} dynres={RekkrSettings.DynamicRes} dynres_switches={dynSwitches} threads={video.RenderThreads} smooth_light={RekkrSettings.SmoothLighting} post={PostFx.Active} bloom={RekkrSettings.Bloom} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
         Debug.Log(summary);
         try
         {

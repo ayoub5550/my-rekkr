@@ -28,6 +28,12 @@ namespace ManagedDoom.UnityPort
         public static int Resolution = 800;      // dev3: max frame lines 400/600/800/1000 (400 = v0.2.0)
         public static bool DynamicRes = true;    // dev3: drop/raise lines to hold the frame rate
         public static bool SmoothLighting = true; // dev3: true-colour light gradients (no 32-step bands)
+        public static int Bloom = 1;             // dev3 post: 0 off, 1 low, 2 medium, 3 high
+        public static int Vignette = 15;         // dev3 post: 0..30 %
+        public static int ColorGrade = 1;        // dev3 post: 0 neutral, 1 vivid, 2 warm
+        public static bool Sharpen = true;       // dev3 post: sharpen when upscaling
+        public static bool Crt;                  // dev3 post: CRT scanlines
+        public static bool SideFill = true;      // dev3: blurred sides on centred 4:3 screens
         public static readonly int[] Resolutions = { 400, 600, 800, 1000 };
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
@@ -60,6 +66,12 @@ namespace ManagedDoom.UnityPort
             Resolution = Mathf.Clamp(PlayerPrefs.GetInt("gfx_res", 800) / 200 * 200, 400, 1000);
             DynamicRes = PlayerPrefs.GetInt("gfx_dynres", 1) == 1;
             SmoothLighting = PlayerPrefs.GetInt("gfx_light", 1) == 1;
+            Bloom = Mathf.Clamp(PlayerPrefs.GetInt("gfx_bloom", 1), 0, 3);
+            Vignette = Mathf.Clamp(PlayerPrefs.GetInt("gfx_vignette", 15), 0, 30);
+            ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 2);
+            Sharpen = PlayerPrefs.GetInt("gfx_sharpen", 1) == 1;
+            Crt = PlayerPrefs.GetInt("gfx_crt", 0) == 1;
+            SideFill = PlayerPrefs.GetInt("gfx_sidefill", 1) == 1;
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -97,6 +109,12 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("gfx_res", Resolution);
             PlayerPrefs.SetInt("gfx_dynres", DynamicRes ? 1 : 0);
             PlayerPrefs.SetInt("gfx_light", SmoothLighting ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_bloom", Bloom);
+            PlayerPrefs.SetInt("gfx_vignette", Vignette);
+            PlayerPrefs.SetInt("gfx_grade", ColorGrade);
+            PlayerPrefs.SetInt("gfx_sharpen", Sharpen ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_crt", Crt ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_sidefill", SideFill ? 1 : 0);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

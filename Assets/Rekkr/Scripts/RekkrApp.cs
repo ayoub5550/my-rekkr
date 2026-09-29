@@ -33,6 +33,8 @@ public sealed partial class RekkrApp : MonoBehaviour
     private string dataDir;
 
     private Material screenMat;
+    private PostFx postFx;
+    private bool postThisFrame;
     private Texture2D texBtn, texBtnPressed, texStickBase, texStickKnob, texWhite;
     private readonly Dictionary<string, Texture2D> icons = new Dictionary<string, Texture2D>();
     private Font latoFont, arabicFont;
@@ -99,6 +101,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         if (SystemInfo.supportsGyroscope) Input.gyro.enabled = RekkrSettings.Gyro;
 
         screenMat = new Material(Resources.Load<Shader>("Rekkr/RekkrScreen"));
+        postFx = new PostFx(screenMat);
         texBtn = Resources.Load<Texture2D>("Rekkr/UI/btn");
         texBtnPressed = Resources.Load<Texture2D>("Rekkr/UI/btn_pressed");
         texStickBase = Resources.Load<Texture2D>("Rekkr/UI/stick_base");
@@ -119,6 +122,12 @@ public sealed partial class RekkrApp : MonoBehaviour
         if (!string.IsNullOrEmpty(shotDir)) { testLoop = true; Directory.CreateDirectory(shotDir); }
         if (Environment.GetEnvironmentVariable("REKKR_SMOOTHLOOK") == "0") RekkrSettings.SmoothLook = false; // desktop A/B
         if (Environment.GetEnvironmentVariable("REKKR_DYNRES") == "0") RekkrSettings.DynamicRes = false;       // desktop A/B
+        if (Environment.GetEnvironmentVariable("REKKR_POST") == "0")   // desktop A/B: all post effects off
+        {
+            RekkrSettings.Bloom = 0; RekkrSettings.Vignette = 0; RekkrSettings.ColorGrade = 0;
+            RekkrSettings.Sharpen = false; RekkrSettings.Crt = false; RekkrSettings.SideFill = false;
+        }
+        if (Environment.GetEnvironmentVariable("REKKR_CRT") == "1") RekkrSettings.Crt = true;
         var envLight = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR");
         if (!string.IsNullOrEmpty(envLight)) RekkrSettings.SmoothLighting = envLight == "1";
     }
@@ -276,6 +285,8 @@ public sealed partial class RekkrApp : MonoBehaviour
             video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
             ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            postThisFrame = PostFx.Active;
+            if (postThisFrame) postFx.Process(video, gameRect);
             if (testLoop) TrackViewAngle(frac);
             UpdateDynamicResolution();
         }

@@ -76,6 +76,9 @@ namespace ManagedDoom.UnityPort
 
         public Texture2D Texture => texture;
         public int RenderThreads => renderer.RenderThreads;
+        public bool Centred => renderer.LastFrameCentred;
+        public float CentredX0 => renderer.CentredX0;
+        public float CentredWidth => renderer.CentredWidth;
         public int FrameWidth => renderer.Width;
         public int FrameHeight => renderer.Height;
         public int CenterOffset => renderer.CenterOffset;

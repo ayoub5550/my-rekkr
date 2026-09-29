@@ -118,10 +118,17 @@ namespace ManagedDoom.Video
             palette.ResetColors(gammaCorrectionParameters[config.video_gammacorrection]);
         }
 
+        /// <summary>my-rekkr dev3: true if the last frame showed a centred 4:3 screen (title, intermission,
+        /// finale) with empty sides; the app can fill them (blurred side-fill).</summary>
+        public bool LastFrameCentred { get; private set; }
+        public float CentredX0 => (float)screen.CenterOffset / screen.Width;
+        public float CentredWidth => (float)screen.BaseWidth / screen.Width;
+
         private void ClearIfWide()
         {
             if (screen.CenterOffset > 0)
             {
+                LastFrameCentred = true;
                 screen.OffsetX = 0;
                 screen.FillRect(0, 0, screen.Width, screen.Height, 0);
             }
@@ -278,6 +285,7 @@ namespace ManagedDoom.Video
         public void Render(Doom doom, Span<byte> destination, Fixed frameFrac)
         {
             trueColorFrame = false;   // set by RenderGame when the 3D view was drawn in true colour
+            LastFrameCentred = false;
             if (doom.Wiping)
             {
                 RenderWipe(doom, destination);

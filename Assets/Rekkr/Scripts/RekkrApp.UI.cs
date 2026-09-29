@@ -60,7 +60,8 @@ public sealed partial class RekkrApp
 
         if (evt == EventType.Repaint)
         {
-            Graphics.DrawTexture(gameRect, video.Texture, screenMat);
+            if (postThisFrame) postFx.Draw(gameRect);
+            else Graphics.DrawTexture(gameRect, video.Texture, screenMat);
             if (input.EditMode)
             {
                 GUI.color = new Color(0, 0, 0, 0.55F);
