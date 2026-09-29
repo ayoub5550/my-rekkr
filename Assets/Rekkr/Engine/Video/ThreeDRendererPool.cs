@@ -75,6 +75,8 @@ namespace ManagedDoom.Video
             set { foreach (var s in strips) s.WindowSize = value; LayoutStrips(); }
         }
 
+        public (int x, int y, int w, int h) WindowRect => strips[0].WindowRect;
+
         public void FillBackground(int x, int y, int width, int height) => strips[0].FillBackground(x, y, width, height);
 
         public void Render(Player player, Fixed frameFrac, Angle? localViewTurn)

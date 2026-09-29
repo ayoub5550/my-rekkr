@@ -71,7 +71,7 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 | 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ✅ 2026-09-29 (device numbers in stage 11) | Zero-copy: renderer writes straight into `GetRawTextureData` → upload CPU **0.54 → 0.01 ms** (Linux). Swappy `optimizedFramePacing` on (`REKKR_FRAMEPACING=0` to disable). `REKKR_GFX_API=vulkan` builds Vulkan+GLES3; default stays GLES3 until the stage 11 A/B on r8q. `PerfMode.SetSustained` + setting `StablePerf` (UI in stage 9, default off). Per-frame string allocations removed (FPS label, Arabic icon keys); `gc0` still 4 per ~2.5 min scenario (IMGUI internals) — incremental GC on, acceptable |
 | 4 | Multithreaded renderer (column strips) | ✅ 2026-09-29 | `ThreeDRendererPool` (2×threads strips, long-lived workers, caller works too); per-instance sector valid-count; sprites/weapon clamped to strip. HeadlessTest `bench` 1066×400 (x86 sandbox): **1.82 → 1.16 / 0.81 / 0.69 ms** for 1/2/4/6 threads; Unity Mono player render 4.06 → 2.87 ms. HOM scan with 4 threads: no seam gaps (43 vs 45 bad views, all vanilla specks). Setting `RenderThreads` (0 auto = min(4, cores−1)), env `REKKR_THREADS`. Not bit-identical to 1 thread — see spec note |
 | 5 | Resolution levels 400/600/800/1000 + dynamic resolution | ✅ 2026-09-29 (UI rows in stage 9) | `Renderer(config, content, width, lines)`; `UnityVideo` caches one renderer+texture per size; `RekkrApp.DynRes.cs` controller (85 %/1 s down, 55 %/4 s up, missed-frame + thermal ≥ SEVERE down, logs `[REKKR] dynres A->B`). `WriteData` now parallel. HeadlessTest bench (x86, 4 threads): 1066×400 0.81 ms, 2134×800 **1.90 ms**, 2666×1000 2.91 ms. HOM scan at 600/800/1000 × 36 maps: only E4M1 closet + ≤67 px one-row plane/wall seams (vanilla precision, 1 physical px). Automap lines `height/400` px thick. Settings `Resolution` (default 800) + `DynamicRes` (default on); env `REKKR_LINES`, `REKKR_DYNRES=0`. Linux 800 lines: dynres stepped 800→600→400 on llvmpipe (GPU-bound) as designed |
-| 6 | True-colour smooth lighting | ⬜ | |
+| 6 | True-colour smooth lighting | ✅ 2026-09-29 | Continuous light curves (same formulas, no truncation, +0.5 level = vanilla mean) blend the two COLORMAP rows around each pixel's level; 3D writes texel + light (`DrawScreen.TexData/LightData`), `Renderer.WriteChunk` blends with flat LUTs, 2D overdraw detected by palette-index mismatch; palette flashes automatically correct. `lightcmp`: mean tone change ≤ 0.89 %, unique colours per frame ×5–6 (136 → 842). **Cost** (x86, 4 threads, 2134×800): 2.0 → 5.0 ms (3D extra stores +0.9, blend write +2.1) → on phones dynres will likely hold 600 lines with it at 120 Hz. Setting `SmoothLighting` (default on), env `REKKR_TRUECOLOR`. Golden (off) unchanged |
 | 7 | GPU post-processing (bloom, vignette, grading, sharpen, CRT) | ⬜ | |
 | 8 | Blurred side-fill for 4:3 screens | ⬜ | |
 | 9 | Graphics tab + Classic/Enhanced presets + first-run auto preset | ⬜ | |
@@ -243,6 +243,13 @@ Deferred to dev4: _(none yet)_
   the shader; invulnerability/fixed colormaps → use the colormap row directly (banded, like the
   original); fuzz (spectre) → multiply the destination pixel by the colormap-6 factor; sky and
   full-bright → unchanged.
+- Implementation note: the overlay mask was replaced by the cheaper "index mismatch" test (a 2D
+  pixel equal to the 3D banded index keeps the smooth colour — visually identical). Fuzz stays
+  banded (mismatch). Wipes use the palette path.
+- **Faster option for dev4 / if phones are too slow:** move the palette + blend to the GPU — upload
+  the 8-bit index frame (R8) + texel/light (RG8) and do `mix(pal[cm[row][t]], pal[cm[row+1][t]], f)`
+  in `RekkrScreen.shader` with 256×1 palette and 256×32 colormap textures. Removes the whole CPU
+  write-out (also for Classic) and 25 % of the upload bandwidth.
 - Optional extra: 8×8 ordered dither on the light fraction when using 32 levels (no banding, no cost).
 - Must work with stage 4 threads and stage 5 levels. Classic preset keeps the byte path (golden).
 - Check: golden PASS in Classic; side-by-side screenshots (E1M1, E3M1 dark area, E4 outdoor) show no

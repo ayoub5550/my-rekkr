@@ -76,6 +76,8 @@ namespace ManagedDoom.Video
             this.config = config;
 
             palette = content.Palette;
+            colorMapRows = new byte[content.ColorMap.Count][];
+            for (var i = 0; i < colorMapRows.Length; i++) colorMapRows[i] = content.ColorMap[i];
 
             if (lines > 0)
             {
@@ -223,6 +225,12 @@ namespace ManagedDoom.Video
                 }
                 else
                 {
+                    if (ThreeDRenderer.TrueColor && screen.TexData == null)
+                    {
+                        screen.TexData = new byte[screen.Data.Length];
+                        screen.LightData = new ushort[screen.Data.Length];
+                    }
+                    trueColorFrame = ThreeDRenderer.TrueColor;
                     threeD.Render(displayPlayer, frameFrac,
                         displayPlayer == consolePlayer && !game.Paused ? LocalViewTurn : null);
                     if (threeD.WindowSize < 8)
@@ -269,6 +277,7 @@ namespace ManagedDoom.Video
         /// <summary>my-rekkr dev3: renders straight into any RGBA32 buffer (e.g. the texture memory).</summary>
         public void Render(Doom doom, Span<byte> destination, Fixed frameFrac)
         {
+            trueColorFrame = false;   // set by RenderGame when the 3D view was drawn in true colour
             if (doom.Wiping)
             {
                 RenderWipe(doom, destination);
@@ -327,6 +336,7 @@ namespace ManagedDoom.Video
 
             RenderMenu(doom);
 
+            trueColorFrame = false;   // the wipe mixes old and new frames: palette only
             WriteData(palette[0], destination);
         }
 
@@ -336,15 +346,23 @@ namespace ManagedDoom.Video
         }
 
         // my-rekkr dev3: palette -> RGBA split into chunks on the render workers (big frames).
+        // With smooth lighting, 3D-view pixels blend the two COLORMAP rows around their continuous
+        // light level; a pixel whose palette index no longer matches its 3D value was overdrawn by
+        // 2D (HUD, messages, menu) and keeps its palette colour.
         private const int WriteChunks = 16;
         private uint[] writeColors;
         private unsafe byte* writeDest;
         private Action<int> writeChunk;
+        private readonly byte[][] colorMapRows;
+        private bool trueColorFrame;
+        private bool writeTrueColor;
+        private (int x, int y, int w, int h) writeWindow;
 
         private unsafe void WriteData(uint[] colors, Span<byte> destination)
         {
             var screenData = screen.Data;
-            if (threeD.ThreadCount == 1 || screenData.Length < 500000)
+            writeTrueColor = trueColorFrame && screen.TexData != null;
+            if (!writeTrueColor && (threeD.ThreadCount == 1 || screenData.Length < 500000))
             {
                 var p = MemoryMarshal.Cast<byte, uint>(destination);
                 for (var i = 0; i < p.Length; i++)
@@ -353,9 +371,11 @@ namespace ManagedDoom.Video
                 }
                 return;
             }
+            if (writeTrueColor) PrepareTrueColorTables(colors);
             fixed (byte* dst = destination)
             {
                 writeColors = colors; writeDest = dst;
+                writeWindow = threeD.WindowRect;
                 writeChunk ??= WriteChunk;
                 threeD.Run(WriteChunks, writeChunk);
                 writeDest = null;
@@ -365,11 +385,73 @@ namespace ManagedDoom.Video
         private unsafe void WriteChunk(int k)
         {
             var screenData = screen.Data;
-            var n = screenData.Length;
-            var start = n * k / WriteChunks; var end = n * (k + 1) / WriteChunks;
             var p = (uint*)writeDest;
             var colors = writeColors;
-            for (var i = start; i < end; i++) p[i] = colors[screenData[i]];
+            if (!writeTrueColor)
+            {
+                var n = screenData.Length;
+                var start = n * k / WriteChunks; var end = n * (k + 1) / WriteChunks;
+                for (var i = start; i < end; i++) p[i] = colors[screenData[i]];
+                return;
+            }
+            var h = screen.Height; var w = screen.Width;
+            var (wx, wy, ww, wh) = writeWindow;
+            var x0 = w * k / WriteChunks; var x1 = w * (k + 1) / WriteChunks;
+            fixed (byte* sd = screenData, tex = screen.TexData, band = bandFlat)
+            fixed (ushort* light = screen.LightData)
+            fixed (uint* lit = litFlat, pal = colors)
+            {
+                for (var x = x0; x < x1; x++)
+                {
+                    var col = x * h;
+                    if (x < wx || x >= wx + ww)
+                    {
+                        for (var i = col; i < col + h; i++) p[i] = pal[sd[i]];
+                        continue;
+                    }
+                    var yEnd = col + wy + wh;
+                    for (var i = col; i < col + wy; i++) p[i] = pal[sd[i]];
+                    for (var i = col + wy; i < yEnd; i++)
+                    {
+                        var s = sd[i];
+                        var l = light[i];
+                        var idx = (l >> 8 << 8) | tex[i];          // row * 256 + texel
+                        var f = (uint)(l & 255);
+                        if (band[idx] != s || f == 0 || idx >= bandLimit) { p[i] = pal[s]; continue; }
+                        var a = lit[idx]; var b = lit[idx + 256];
+                        var fa = 256u - f;
+                        p[i] = 0xFF000000u
+                            | ((((a & 0xFF00FFu) * fa + (b & 0xFF00FFu) * f) >> 8) & 0xFF00FFu)
+                            | ((((a & 0xFF00u) * fa + (b & 0xFF00u) * f) >> 8) & 0xFF00u);
+                    }
+                    for (var i = yEnd; i < col + h; i++) p[i] = pal[sd[i]];
+                }
+            }
+        }
+
+        // Flat lookup tables for the true-colour writer: bandFlat[row*256+t] = COLORMAP[row][t],
+        // litFlat = its colour in the current palette (rebuilt when the palette changes).
+        private byte[] bandFlat;
+        private uint[] litFlat;
+        private uint[] litPalette;
+        private int bandLimit;
+
+        private void PrepareTrueColorTables(uint[] colors)
+        {
+            if (bandFlat == null)
+            {
+                var rowsUsed = Math.Min(32, colorMapRows.Length);
+                bandFlat = new byte[rowsUsed * 256];
+                for (var r = 0; r < rowsUsed; r++)
+                    for (var t = 0; t < 256; t++) bandFlat[r * 256 + t] = colorMapRows[r][t];
+                litFlat = new uint[bandFlat.Length];
+                bandLimit = (rowsUsed - 1) * 256;   // the last row has no darker neighbour
+            }
+            if (litPalette != colors)
+            {
+                for (var i = 0; i < bandFlat.Length; i++) litFlat[i] = colors[bandFlat[i]];
+                litPalette = colors;
+            }
         }
 
         private static int GetPaletteNumber(Player player)

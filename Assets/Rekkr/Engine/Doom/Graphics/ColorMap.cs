@@ -62,6 +62,8 @@ namespace ManagedDoom
             }
         }
 
+        public int Count => data.Length;
+
         public byte[] FullBright
         {
             get

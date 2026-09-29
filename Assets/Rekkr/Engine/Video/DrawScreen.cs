@@ -32,6 +32,11 @@ namespace ManagedDoom.Video
         /// (patches, text, rectangles) so 320-wide 2D layouts stay centred on a wider screen.</summary>
         public int OffsetX;
 
+        /// <summary>my-rekkr dev3 smooth lighting: unlit texel index and light level (1/256 colormap
+        /// levels) of each 3D-view pixel, written next to the classic palette index. Null when off.</summary>
+        public byte[] TexData;
+        public ushort[] LightData;
+
         public DrawScreen(Wad wad, int width, int height)
         {
             this.width = width;

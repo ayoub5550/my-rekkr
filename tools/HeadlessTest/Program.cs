@@ -24,6 +24,12 @@ public static class Program
         var mode = argv.Length > 2 ? argv[2] : "all";
         var thr = Environment.GetEnvironmentVariable("REKKR_THREADS");
         ThreeDRendererPool.Threads = string.IsNullOrEmpty(thr) ? 1 : int.Parse(thr);
+        ThreeDRenderer.TrueColor = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR") == "1";
+        if (mode == "lightcmp")
+        {
+            var largs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return LightCmp.Run(new GameContent(largs), largs, outDir);
+        }
         Console.WriteLine($"render threads={(ThreeDRendererPool.Threads > 0 ? ThreeDRendererPool.Threads : ThreeDRendererPool.AutoThreads)}");
         if (mode == "tdiff")
         {

@@ -119,6 +119,8 @@ public sealed partial class RekkrApp : MonoBehaviour
         if (!string.IsNullOrEmpty(shotDir)) { testLoop = true; Directory.CreateDirectory(shotDir); }
         if (Environment.GetEnvironmentVariable("REKKR_SMOOTHLOOK") == "0") RekkrSettings.SmoothLook = false; // desktop A/B
         if (Environment.GetEnvironmentVariable("REKKR_DYNRES") == "0") RekkrSettings.DynamicRes = false;       // desktop A/B
+        var envLight = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR");
+        if (!string.IsNullOrEmpty(envLight)) RekkrSettings.SmoothLighting = envLight == "1";
     }
 
     private IEnumerator Start()
@@ -272,6 +274,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             if (tics > 0) WatchGameplay();
             var frac = (float)(ticAccum / TicTime);
             video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
+            ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
             if (testLoop) TrackViewAngle(frac);
             UpdateDynamicResolution();

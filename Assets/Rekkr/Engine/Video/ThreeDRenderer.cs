@@ -334,6 +334,39 @@ namespace ManagedDoom.Video
         private byte[][][] scaleLight;
         private byte[][][] zLight;
 
+        // my-rekkr dev3 stage 6 (smooth lighting): the same light curves as the byte tables above, but
+        // continuous, in 1/256 colormap-level units. The true-colour writer blends the two colormap
+        // rows around the level, so the original 32 bands become smooth gradients while every pixel
+        // keeps REKKR's own COLORMAP tones.
+        public static bool TrueColor;
+        private bool tc;
+        private int[][] diminishingScaleLevel;
+        private int[][] diminishingZLevel;
+        private int[][] fixedLevel;
+        private int[][] scaleLevel;
+        private int[][] zLevel;
+        private int[] curWallLevels, curPlaneLevels, curSpriteLevels;
+        private int curLight;
+        private byte[] texData;
+        private ushort[] lightData;
+        private int[] ceilingLightEnc, floorLightEnc;
+
+        private static int ToLevel256(double level)
+        {
+            var v = (int)Math.Round(level * 256);
+            return Math.Clamp(v, 0, (colorMapCount - 1) * 256);
+        }
+
+        /// <summary>Encoded light for a table index given as fixed-point value >> shift (fraction kept).</summary>
+        private static int EncLight(int[] levels, int value, int shift)
+        {
+            var idx = value >> shift;
+            if (idx >= levels.Length - 1) return levels[levels.Length - 1];
+            if (idx < 0) return levels[0];
+            var f = (value >> (shift - 8)) & 255;
+            return (levels[idx] * (256 - f) + levels[idx + 1] * f) >> 8;
+        }
+
         private int extraLight;
         private int fixedColorMap;
 
@@ -344,12 +377,18 @@ namespace ManagedDoom.Video
             diminishingScaleLight = new byte[lightLevelCount][][];
             diminishingZLight = new byte[lightLevelCount][][];
             fixedLight = new byte[lightLevelCount][][];
+            diminishingScaleLevel = new int[lightLevelCount][];
+            diminishingZLevel = new int[lightLevelCount][];
+            fixedLevel = new int[lightLevelCount][];
 
             for (var i = 0; i < lightLevelCount; i++)
             {
                 diminishingScaleLight[i] = new byte[maxScaleLight][];
                 diminishingZLight[i] = new byte[maxZLight][];
                 fixedLight[i] = new byte[Math.Max(maxScaleLight, maxZLight)][];
+                diminishingScaleLevel[i] = new int[maxScaleLight];
+                diminishingZLevel[i] = new int[maxZLight];
+                fixedLevel[i] = new int[Math.Max(maxScaleLight, maxZLight)];
             }
 
             var distMap = 2;
@@ -374,6 +413,8 @@ namespace ManagedDoom.Video
                     }
 
                     diminishingZLight[i][j] = colorMap[level];
+                    // continuous: level = start - 80/(j+1); +0.5 matches the mean of vanilla's truncation
+                    diminishingZLevel[i][j] = ToLevel256(start - 80.0 / (j + 1) + 0.5);
                 }
             }
         }
@@ -399,6 +440,7 @@ namespace ManagedDoom.Video
                     }
 
                     diminishingScaleLight[i][j] = colorMap[level];
+                    diminishingScaleLevel[i][j] = ToLevel256(start - j * 320.0 / nonWideWidth / distMap + 0.5);
                 }
             }
         }
@@ -409,6 +451,8 @@ namespace ManagedDoom.Video
             {
                 scaleLight = diminishingScaleLight;
                 zLight = diminishingZLight;
+                scaleLevel = diminishingScaleLevel;
+                zLevel = diminishingZLevel;
                 fixedLight[0][0] = null;
             }
             else if (fixedLight[0][0] != colorMap[fixedColorMap])
@@ -418,10 +462,13 @@ namespace ManagedDoom.Video
                     for (var j = 0; j < fixedLight[i].Length; j++)
                     {
                         fixedLight[i][j] = colorMap[fixedColorMap];
+                        fixedLevel[i][j] = fixedColorMap << 8;
                     }
                 }
                 scaleLight = fixedLight;
                 zLight = fixedLight;
+                scaleLevel = fixedLevel;
+                zLevel = fixedLevel;
             }
         }
 
@@ -762,6 +809,15 @@ namespace ManagedDoom.Video
 
             extraLight = player.ExtraLight;
             fixedColorMap = player.FixedColorMap;
+
+            tc = TrueColor && screen.TexData != null;
+            texData = screen.TexData;
+            lightData = screen.LightData;
+            if (tc && (ceilingLightEnc == null || ceilingLightEnc.Length != screenHeight))
+            {
+                ceilingLightEnc = new int[screenHeight];
+                floorLightEnc = new int[screenHeight];
+            }
 
             ClearPlaneRendering();
             ClearLighting();
@@ -1356,6 +1412,7 @@ namespace ManagedDoom.Video
             }
 
             var wallLights = scaleLight[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
+            curWallLevels = scaleLevel[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
 
             //
             // Determine where on the screen the wall is drawn.
@@ -1377,6 +1434,7 @@ namespace ManagedDoom.Video
 
             var planeLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
             var planeLights = zLight[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
+            curPlaneLevels = zLevel[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
 
             //
             // Prepare to record the rendering history.
@@ -1443,6 +1501,7 @@ namespace ManagedDoom.Video
                         }
 
                         var invScale = new Fixed((int)(0xffffffffu / (uint)rwScale.Data));
+                        if (tc) curLight = EncLight(curWallLevels, rwScale.Data, scaleLightShift);
                         DrawColumn(source[0], wallLights[lightIndex], x, wy1, wy2, invScale, middleTextureAlt);
                     }
                 }
@@ -1669,6 +1728,7 @@ namespace ManagedDoom.Video
                 }
 
                 wallLights = scaleLight[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
+                curWallLevels = scaleLevel[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
             }
 
             //
@@ -1727,6 +1787,7 @@ namespace ManagedDoom.Video
 
             var planeLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
             var planeLights = zLight[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
+            curPlaneLevels = zLevel[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
 
             //
             // Prepare to record the rendering history.
@@ -1829,6 +1890,7 @@ namespace ManagedDoom.Video
                     {
                         lightIndex = maxScaleLight - 1;
                     }
+                    if (tc) curLight = EncLight(curWallLevels, rwScale.Data, scaleLightShift);
 
                     invScale = new Fixed((int)(0xffffffffu / (uint)rwScale.Data));
                 }
@@ -1985,6 +2047,7 @@ namespace ManagedDoom.Video
             }
 
             var wallLights = scaleLight[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
+            curWallLevels = scaleLevel[Math.Clamp(wallLightLevel, 0, lightLevelCount - 1)];
 
             var wallTexture = textures[world.Specials.TextureTranslation[seg.SideDef.MiddleTexture]];
             var mask = wallTexture.Width - 1;
@@ -2010,6 +2073,7 @@ namespace ManagedDoom.Video
             for (var x = x1; x <= x2; x++)
             {
                 var index = Math.Min(scale.Data >> scaleLightShift, maxScaleLight - 1);
+                if (tc) curLight = EncLight(curWallLevels, scale.Data, scaleLightShift);
 
                 var col = clipData[drawSeg.MaskedTextureColumn + x];
 
@@ -2082,10 +2146,14 @@ namespace ManagedDoom.Video
                     ceilingYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     ceilingLights[y] = colorMap;
+                    if (tc) ceilingLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
 
@@ -2095,7 +2163,9 @@ namespace ManagedDoom.Video
                     var yFrac = ceilingYFrac[y] + ceilingYStep[y];
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = ceilingLights[y][flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = ceilingLights[y][ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)ceilingLightEnc[y]; }
                     pos++;
 
                     ceilingXFrac[y] = xFrac;
@@ -2116,10 +2186,14 @@ namespace ManagedDoom.Video
                     ceilingYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     ceilingLights[y] = colorMap;
+                    if (tc) ceilingLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
             }
@@ -2141,10 +2215,14 @@ namespace ManagedDoom.Video
                     ceilingYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     ceilingLights[y] = colorMap;
+                    if (tc) ceilingLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
             }
@@ -2198,10 +2276,14 @@ namespace ManagedDoom.Video
                     floorYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     floorLights[y] = colorMap;
+                    if (tc) floorLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
 
@@ -2211,7 +2293,9 @@ namespace ManagedDoom.Video
                     var yFrac = floorYFrac[y] + floorYStep[y];
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = floorLights[y][flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = floorLights[y][ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)floorLightEnc[y]; }
                     pos++;
 
                     floorXFrac[y] = xFrac;
@@ -2232,10 +2316,14 @@ namespace ManagedDoom.Video
                     floorYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     floorLights[y] = colorMap;
+                    if (tc) floorLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
             }
@@ -2257,10 +2345,14 @@ namespace ManagedDoom.Video
                     floorYFrac[y] = yFrac;
 
                     var colorMap = planeLights[Math.Min((uint)(distance.Data >> zLightShift), maxZLight - 1)];
+                    var lightEnc = tc ? EncLight(curPlaneLevels, distance.Data, zLightShift) : 0;
                     floorLights[y] = colorMap;
+                    if (tc) floorLightEnc[y] = lightEnc;
 
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
-                    screenData[pos] = colorMap[flatData[spot]];
+                    var ft = flatData[spot];
+                    screenData[pos] = colorMap[ft];
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; }
                     pos++;
                 }
             }
@@ -2302,6 +2394,19 @@ namespace ManagedDoom.Video
             // This is as fast as it gets.
             var source = column.Data;
             var offset = column.Offset;
+            if (tc)
+            {
+                var light = (ushort)curLight;
+                for (var pos = pos1; pos <= pos2; pos++)
+                {
+                    var t = source[offset + ((frac.Data >> Fixed.FracBits) & 127)];
+                    screenData[pos] = map[t];
+                    texData[pos] = t;
+                    lightData[pos] = light;
+                    frac += fracStep;
+                }
+                return;
+            }
             for (var pos = pos1; pos <= pos2; pos++)
             {
                 // Re-map color indices from wall texture column
@@ -2345,7 +2450,9 @@ namespace ManagedDoom.Video
             {
                 // Re-map color indices from wall texture column
                 // using a lighting/special effects LUT.
-                screenData[pos] = map[translation[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]]];
+                var t = translation[source[offset + ((frac.Data >> Fixed.FracBits) & 127)]];
+                screenData[pos] = map[t];
+                if (tc) { texData[pos] = t; lightData[pos] = (ushort)curLight; }
                 frac += fracStep;
             }
         }
@@ -2391,6 +2498,7 @@ namespace ManagedDoom.Video
             var angle = (viewAngle + xToAngle[x]).Data >> angleToSkyShift;
             var mask = world.Map.SkyTexture.Width - 1;
             var source = world.Map.SkyTexture.Composite.Columns[angle & mask];
+            curLight = 0;
             DrawColumn(source[0], colorMap[0], x, y1, y2, skyInvScale, skyTextureAlt);
         }
 
@@ -2495,6 +2603,7 @@ namespace ManagedDoom.Video
 
             var spriteLightLevel = (sector.LightLevel >> lightSegShift) + extraLight;
             var spriteLights = scaleLight[Math.Clamp(spriteLightLevel, 0, lightLevelCount - 1)];
+            curSpriteLevels = scaleLevel[Math.Clamp(spriteLightLevel, 0, lightLevelCount - 1)];
 
             // Handle all things in sector.
             foreach (var thing in sector)
@@ -2621,15 +2730,18 @@ namespace ManagedDoom.Video
                 if ((thing.Frame & 0x8000) == 0)
                 {
                     vis.ColorMap = spriteLights[Math.Min(xScale.Data >> scaleLightShift, maxScaleLight - 1)];
+                    vis.Light = EncLight(curSpriteLevels, xScale.Data, scaleLightShift);
                 }
                 else
                 {
                     vis.ColorMap = colorMap.FullBright;
+                    vis.Light = 0;
                 }
             }
             else
             {
                 vis.ColorMap = colorMap[fixedColorMap];
+                vis.Light = fixedColorMap << 8;
             }
         }
 
@@ -2645,6 +2757,7 @@ namespace ManagedDoom.Video
 
         private void DrawSprite(VisSprite sprite)
         {
+            curLight = sprite.Light;
             for (var x = sprite.X1; x <= sprite.X2; x++)
             {
                 lowerClip[x] = -2;
@@ -2896,17 +3009,21 @@ namespace ManagedDoom.Video
                 if ((psp.State.Frame & 0x8000) == 0)
                 {
                     vis.ColorMap = spriteLights[maxScaleLight - 1];
+                    vis.Light = curSpriteLevels[maxScaleLight - 1];
                 }
                 else
                 {
                     vis.ColorMap = colorMap.FullBright;
+                    vis.Light = 0;
                 }
             }
             else
             {
                 vis.ColorMap = colorMap[fixedColorMap];
+                vis.Light = fixedColorMap << 8;
             }
 
+            curLight = vis.Light;
             if (fuzz)
             {
                 var frac = vis.StartFrac;
@@ -2955,14 +3072,17 @@ namespace ManagedDoom.Video
             if (spriteLightLevel < 0)
             {
                 spriteLights = scaleLight[0];
+                curSpriteLevels = scaleLevel[0];
             }
             else if (spriteLightLevel >= lightLevelCount)
             {
                 spriteLights = scaleLight[lightLevelCount - 1];
+                curSpriteLevels = scaleLevel[lightLevelCount - 1];
             }
             else
             {
                 spriteLights = scaleLight[spriteLightLevel];
+                curSpriteLevels = scaleLevel[spriteLightLevel];
             }
 
             bool fuzz;
@@ -2991,6 +3111,7 @@ namespace ManagedDoom.Video
 
 
         public int WindowWidth => windowWidth;
+        public (int x, int y, int w, int h) WindowRect => (windowX, windowY, windowWidth, windowHeight);
 
         public int WindowSize
         {
@@ -3079,6 +3200,7 @@ namespace ManagedDoom.Video
 
             // For color translation and shadow draw.
             public byte[] ColorMap;
+            public int Light;   // my-rekkr smooth lighting (1/256 levels)
 
             public MobjFlags MobjFlags;
         }

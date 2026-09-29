@@ -294,3 +294,38 @@ public static class ThreadDiff
         return bad == 0 ? 0 : 1;
     }
 }
+
+// Smooth lighting check: the same views rendered banded (classic) and smooth; writes PNG pairs and
+// the mean RGB difference (tone must stay the same, only the banding goes away).
+public static class LightCmp
+{
+    public static int Run(GameContent content, CommandLineArgs args, string outDir)
+    {
+        var worst = 0.0;
+        foreach (var (e, m, ang) in new[] { (1, 1, 0), (1, 1, 4), (3, 1, 0), (3, 1, 2), (4, 1, 6), (2, 6, 1), (1, 7, 3) })
+        {
+            var means = new double[2]; byte[][] frames = new byte[2][]; int W = 0, H = 0;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                ThreeDRenderer.TrueColor = pass == 1;
+                var c = new Config(); c.video_highresolution = true; c.video_gamescreensize = 8;
+                var v = new ShotVideo(c, content, 2134, 800); v.DisplayMessage = false;
+                var d = new Doom(args, c, content, v, null, null, null);
+                d.NewGame(GameSkill.Medium, e, m);
+                for (int t = 0; t < 140; t++) d.Update();
+                d.Game.World.ConsolePlayer.Mobj.Angle = new Angle((uint)(ang * (uint.MaxValue / 8)));
+                var buf = (byte[])v.Frame(d, Fixed.One).Clone();
+                frames[pass] = buf; W = v.W; H = v.H;
+                double sum = 0; for (int i = 0; i < buf.Length; i += 4) sum += buf[i] + buf[i + 1] + buf[i + 2];
+                means[pass] = sum / (buf.Length / 4 * 3);
+                v.Shot(d, Path.Combine(outDir, $"light_E{e}M{m}_a{ang}_{(pass == 0 ? "classic" : "smooth")}.png"));
+            }
+            var diff = Math.Abs(means[1] - means[0]) / Math.Max(1, means[0]) * 100;
+            worst = Math.Max(worst, diff);
+            Console.WriteLine($"lightcmp E{e}M{m} a{ang}: mean classic={means[0]:F1} smooth={means[1]:F1} diff={diff:F2}%");
+        }
+        ThreeDRenderer.TrueColor = false;
+        Console.WriteLine($"lightcmp worst mean diff={worst:F2}%");
+        return worst < 3 ? 0 : 1;
+    }
+}
