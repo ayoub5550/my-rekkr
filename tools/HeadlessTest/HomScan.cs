@@ -13,14 +13,16 @@ public static class HomScan
     public const int SamplesPerMap = 40;
     public const int Angles = 8;
 
-    public static int Run(GameContent content, CommandLineArgs args, int[] widths, string outDir)
+    public static int Run(GameContent content, CommandLineArgs args, string[] widths, string outDir)
     {
         var total = 0; var views = 0; var bad = 0;
         var report = new List<string>();
-        foreach (var wide in widths)
+        foreach (var spec in widths)
         {
+            // "<width>" (400 lines) or "<width>:<lines>"
+            var wide = int.Parse(spec.Split(':')[0]); var lines = spec.Contains(':') ? int.Parse(spec.Split(':')[1]) : 0;
             var c = new Config(); c.video_highresolution = true; c.video_gamescreensize = 8;
-            var v = new ShotVideo(c, content, wide);
+            var v = new ShotVideo(c, content, wide, lines);
             v.DisplayMessage = false;
             var d = new Doom(args, c, content, v, null, null, null);
             for (int e = 1; e <= 4; e++)
@@ -79,7 +81,7 @@ public static class HomScan
                                 if (diff > mapWorst)
                                 {
                                     mapWorst = diff;
-                                    SaveMask(v, first, data, Path.Combine(outDir, $"hom_E{e}M{m}_w{wide}.png"));
+                                    SaveMask(v, first, data, Path.Combine(outDir, $"hom_E{e}M{m}_w{wide}x{v.H}.png"));
                                 }
                             }
                         }
@@ -235,12 +237,12 @@ public static class Bench
 {
     public static int Run(GameContent content, CommandLineArgs args, string size)
     {
-        var width = int.Parse(size.Split(':')[0]);
+        var width = int.Parse(size.Split(':')[0]); var lines = size.Contains(':') ? int.Parse(size.Split(':')[1]) : 0;
         foreach (var threads in new[] { 1, 2, 4, 6 })
         {
             ThreeDRendererPool.Threads = threads;
             var c = new Config(); c.video_highresolution = true; c.video_gamescreensize = 8;
-            var v = new ShotVideo(c, content, width); v.DisplayMessage = false;
+            var v = new ShotVideo(c, content, width, lines); v.DisplayMessage = false;
             var d = new Doom(args, c, content, v, null, null, null);
             double total = 0; int frames = 0; double worst = 0;
             foreach (var (e, m) in new[] { (1, 1), (1, 7), (2, 6), (3, 6), (4, 1), (4, 9) })
@@ -260,7 +262,7 @@ public static class Bench
                     }
                 }
             }
-            Console.WriteLine($"bench w={width} threads={threads} ms_avg={total / frames:F3} ms_max={worst:F2} frames={frames}");
+            Console.WriteLine($"bench {v.W}x{v.H} threads={threads} ms_avg={total / frames:F3} ms_max={worst:F2} frames={frames}");
         }
         return 0;
     }

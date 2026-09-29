@@ -492,6 +492,20 @@ namespace ManagedDoom.Video
             }
         }
 
+        // my-rekkr dev3: automap lines keep their on-screen thickness at 600+ lines (1 px per 400
+        // lines; 400 lines = the original 1 px line, so the Classic look is unchanged).
+        private int LineThickness => Math.Max(1, height / 400);
+
+        private void Plot(int x, int y, int color)
+        {
+            var t = LineThickness;
+            if (t == 1) { data[height * x + y] = (byte)color; return; }
+            var x2 = Math.Min(width, x + t); var y2 = Math.Min(height, y + t);
+            for (var px = x; px < x2; px++)
+                for (var py = y; py < y2; py++)
+                    data[height * px + py] = (byte)color;
+        }
+
         private void Bresenham(int x1, int y1, int x2, int y2, int color)
         {
             var dx = x2 - x1;
@@ -511,7 +525,7 @@ namespace ManagedDoom.Video
 
                 while (true)
                 {
-                    data[height * x + y] = (byte)color;
+                    Plot(x, y, color);
 
                     if (x == x2)
                     {
@@ -533,7 +547,7 @@ namespace ManagedDoom.Video
                 var d = ax - ay / 2;
                 while (true)
                 {
-                    data[height * x + y] = (byte)color;
+                    Plot(x, y, color);
 
                     if (y == y2)
                     {

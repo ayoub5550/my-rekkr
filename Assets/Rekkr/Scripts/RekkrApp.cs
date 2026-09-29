@@ -118,6 +118,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         shotDir = Environment.GetEnvironmentVariable("REKKR_SHOTS");
         if (!string.IsNullOrEmpty(shotDir)) { testLoop = true; Directory.CreateDirectory(shotDir); }
         if (Environment.GetEnvironmentVariable("REKKR_SMOOTHLOOK") == "0") RekkrSettings.SmoothLook = false; // desktop A/B
+        if (Environment.GetEnvironmentVariable("REKKR_DYNRES") == "0") RekkrSettings.DynamicRes = false;       // desktop A/B
     }
 
     private IEnumerator Start()
@@ -154,7 +155,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             });
             content = new GameContent(args);
             lastScreenW = Screen.width; lastScreenH = Screen.height;
-            video = new UnityVideo(config, content, WideWidth());
+            video = new UnityVideo(config, content, WideWidth(StartLines()), StartLines());
             sound = new UnitySound(config, content, gameObject);
             try
             {
@@ -186,17 +187,20 @@ public sealed partial class RekkrApp : MonoBehaviour
 
     /// <summary>Frame width in 640x400 pixels for the current screen: fills the display
     /// (Doom pixels are 1.2x taller than wide), 640 = classic 4:3.</summary>
-    private int WideWidth()
+    private int WideWidth() => WideWidth(video != null ? video.Lines : StartLines());
+
+    /// <summary>dev3: frame width for a frame of <paramref name="lines"/> lines (400/600/800/1000).</summary>
+    private int WideWidth(int lines)
     {
-        if (!RekkrSettings.Widescreen) return 640;
+        if (!RekkrSettings.Widescreen) return lines * 8 / 5;
         float w = Mathf.Max(Screen.width, Screen.height), h = Mathf.Min(Screen.width, Screen.height);
-        var width = Mathf.RoundToInt(400F * 1.2F * w / Mathf.Max(1F, h));
-        return Mathf.Clamp(width, 640, 1200) & ~1;
+        var width = Mathf.RoundToInt(lines * 1.2F * w / Mathf.Max(1F, h));
+        return Mathf.Clamp(width, lines * 8 / 5, lines * 3) & ~1;
     }
 
     private void ApplyWidescreen()
     {
-        if (video != null && video.SetWideWidth(WideWidth()))
+        if (video != null && video.SetFrame(WideWidth(), video.Lines))
         {
             Doom?.ResetWipe();
             Debug.Log($"[REKKR] frame {video.FrameWidth}x{video.FrameHeight}");
@@ -270,6 +274,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
             if (testLoop) TrackViewAngle(frac);
+            UpdateDynamicResolution();
         }
         catch (Exception e)
         {

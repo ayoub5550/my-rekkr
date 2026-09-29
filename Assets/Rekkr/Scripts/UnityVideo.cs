@@ -18,32 +18,56 @@ namespace ManagedDoom.UnityPort
         private Texture2D texture;
         private int wideWidth;
 
-        public UnityVideo(Config config, GameContent content, int wideWidth = 0)
+        public UnityVideo(Config config, GameContent content, int wideWidth = 0, int lines = 400)
         {
             this.config = config;
             this.content = content;
-            Create(wideWidth);
+            Create(wideWidth, lines);
         }
 
-        private void Create(int wide)
+        // dev3 stage 5: one renderer + texture per frame size, kept alive so dynamic resolution can
+        // switch between levels without rebuilding tables or restarting render threads.
+        private readonly System.Collections.Generic.Dictionary<long, (Renderer r, Texture2D t, byte[] f)> cache =
+            new System.Collections.Generic.Dictionary<long, (Renderer, Texture2D, byte[])>();
+        private int lines = 400;
+
+        public int Lines => lines;
+
+        private void Create(int wide, int lines)
         {
+            var old = renderer;
+            this.lines = lines;
             wideWidth = wide;
-            renderer?.Dispose();
-            renderer = new Renderer(config, content, wide);
-            frame = new byte[4 * renderer.Width * renderer.Height];
-            if (texture != null) UnityEngine.Object.Destroy(texture);
-            texture = new Texture2D(renderer.Height, renderer.Width, TextureFormat.RGBA32, false, false);
-            texture.filterMode = FilterMode.Bilinear;
-            texture.wrapMode = TextureWrapMode.Clamp;
-            texture.name = "DoomFrame";
+            var key = ((long)lines << 32) | (uint)(System.Math.Max(lines * 8 / 5, wide & ~1));
+            if (!cache.TryGetValue(key, out var entry))
+            {
+                var r = new Renderer(config, content, wide, lines);
+                var t = new Texture2D(r.Height, r.Width, TextureFormat.RGBA32, false, false);
+                t.filterMode = FilterMode.Bilinear;
+                t.wrapMode = TextureWrapMode.Clamp;
+                t.name = "DoomFrame" + r.Width + "x" + r.Height;
+                entry = (r, t, new byte[4 * r.Width * r.Height]);
+                cache[key] = entry;
+            }
+            renderer = entry.r; texture = entry.t; frame = entry.f;
+            if (old != null && old != renderer)
+            {
+                // Carry the per-renderer settings over (screen size, messages, gamma).
+                renderer.WindowSize = old.WindowSize;
+                renderer.DisplayMessage = old.DisplayMessage;
+                renderer.GammaCorrectionLevel = old.GammaCorrectionLevel;
+            }
         }
 
         /// <summary>Change the frame width (widescreen on/off, rotation). Returns true if it changed.</summary>
-        public bool SetWideWidth(int wide)
+        public bool SetWideWidth(int wide) => SetFrame(wide, lines);
+
+        /// <summary>dev3: change frame width and height (resolution level). Returns true if it changed.</summary>
+        public bool SetFrame(int wide, int lines)
         {
-            var target = System.Math.Max(640, wide & ~1);
-            if (target == renderer.Width) return false;
-            Create(wide);
+            var target = System.Math.Max(lines * 8 / 5, wide & ~1);
+            if (target == renderer.Width && lines == renderer.Height) return false;
+            Create(wide, lines);
             return true;
         }
 
@@ -107,7 +131,9 @@ namespace ManagedDoom.UnityPort
 
         public void Dispose()
         {
-            if (texture != null) { UnityEngine.Object.Destroy(texture); texture = null; }
+            foreach (var e in cache.Values) { e.r.Dispose(); UnityEngine.Object.Destroy(e.t); }
+            cache.Clear();
+            texture = null;
         }
     }
 }

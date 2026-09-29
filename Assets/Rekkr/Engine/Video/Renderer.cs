@@ -64,13 +64,26 @@ namespace ManagedDoom.Video
 
         /// <summary>my-rekkr: <paramref name="wideWidth"/> &gt; 0 requests a widescreen frame
         /// (width in 640x400 pixels; 4:3 is 640). 2D screens stay centred, the 3D view is Hor+.</summary>
-        public Renderer(Config config, GameContent content, int wideWidth)
+        public Renderer(Config config, GameContent content, int wideWidth) : this(config, content, wideWidth, 0)
+        {
+        }
+
+        /// <summary>my-rekkr dev3: <paramref name="lines"/> &gt; 0 selects the frame height (400, 600, 800,
+        /// 1000 — multiples of 200 so 2D patches keep an integer scale); <paramref name="wideWidth"/> is
+        /// then the frame width in pixels of that height.</summary>
+        public Renderer(Config config, GameContent content, int wideWidth, int lines)
         {
             this.config = config;
 
             palette = content.Palette;
 
-            if (config.video_highresolution)
+            if (lines > 0)
+            {
+                lines = Math.Max(200, lines / 200 * 200);
+                var w = Math.Max(lines * 8 / 5, wideWidth & ~1);
+                screen = new DrawScreen(content.Wad, w, lines);
+            }
+            else if (config.video_highresolution)
             {
                 var w = Math.Max(640, wideWidth & ~1);
                 screen = new DrawScreen(content.Wad, w, 400);
@@ -322,14 +335,41 @@ namespace ManagedDoom.Video
             Array.Copy(screen.Data, wipeBuffer, screen.Data.Length);
         }
 
-        private void WriteData(uint[] colors, Span<byte> destination)
+        // my-rekkr dev3: palette -> RGBA split into chunks on the render workers (big frames).
+        private const int WriteChunks = 16;
+        private uint[] writeColors;
+        private unsafe byte* writeDest;
+        private Action<int> writeChunk;
+
+        private unsafe void WriteData(uint[] colors, Span<byte> destination)
         {
             var screenData = screen.Data;
-            var p = MemoryMarshal.Cast<byte, uint>(destination);
-            for (var i = 0; i < p.Length; i++)
+            if (threeD.ThreadCount == 1 || screenData.Length < 500000)
             {
-                p[i] = colors[screenData[i]];
+                var p = MemoryMarshal.Cast<byte, uint>(destination);
+                for (var i = 0; i < p.Length; i++)
+                {
+                    p[i] = colors[screenData[i]];
+                }
+                return;
             }
+            fixed (byte* dst = destination)
+            {
+                writeColors = colors; writeDest = dst;
+                writeChunk ??= WriteChunk;
+                threeD.Run(WriteChunks, writeChunk);
+                writeDest = null;
+            }
+        }
+
+        private unsafe void WriteChunk(int k)
+        {
+            var screenData = screen.Data;
+            var n = screenData.Length;
+            var start = n * k / WriteChunks; var end = n * (k + 1) / WriteChunks;
+            var p = (uint*)writeDest;
+            var colors = writeColors;
+            for (var i = start; i < end; i++) p[i] = colors[screenData[i]];
         }
 
         private static int GetPaletteNumber(Player player)

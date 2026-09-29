@@ -28,6 +28,9 @@ namespace ManagedDoom.Video
         private Angle? localViewTurn;
         private Exception error;
         private readonly DrawScreen screen;
+        private Action<int> job;
+        private int jobCount;
+        private readonly Action<int> renderStrip;
 
         public int ThreadCount => workers.Length + 1;
         public int StripCount => strips.Length;
@@ -49,6 +52,7 @@ namespace ManagedDoom.Video
                 workers[k] = new Thread(() => WorkerLoop(k)) { IsBackground = true, Name = "REKKR render " + (k + 1) };
                 workers[k].Start();
             }
+            renderStrip = i => strips[i].Render(player, frameFrac, localViewTurn);
             LayoutStrips();
         }
 
@@ -77,6 +81,15 @@ namespace ManagedDoom.Video
         {
             if (strips.Length == 1) { strips[0].Render(player, frameFrac, localViewTurn); return; }
             this.player = player; this.frameFrac = frameFrac; this.localViewTurn = localViewTurn;
+            Run(strips.Length, renderStrip);
+        }
+
+        /// <summary>Runs job(0..count-1) on the workers + caller and waits. With one thread it
+        /// just loops. Pass a cached delegate (no per-frame allocation).</summary>
+        public void Run(int count, Action<int> job)
+        {
+            if (workers.Length == 0) { for (var i = 0; i < count; i++) job(i); return; }
+            this.job = job; jobCount = count;
             error = null;
             next = -1;
             done.Reset(workers.Length + 1);
@@ -91,12 +104,12 @@ namespace ManagedDoom.Video
             try
             {
                 int i;
-                while ((i = Interlocked.Increment(ref next)) < strips.Length)
+                while ((i = Interlocked.Increment(ref next)) < jobCount)
                 {
-                    strips[i].Render(player, frameFrac, localViewTurn);
+                    job(i);
                 }
             }
-            catch (Exception e) { error = e; next = strips.Length; }
+            catch (Exception e) { error = e; next = jobCount; }
             finally { done.Signal(); }
         }
 

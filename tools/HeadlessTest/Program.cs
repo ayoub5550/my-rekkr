@@ -56,7 +56,7 @@ public static class Program
         if (mode == "hom")
         {
             var hargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
-            var widths = argv.Length > 3 ? argv[3].Split(',').Select(int.Parse).ToArray() : new[] { 1066, 640 };
+            var widths = argv.Length > 3 ? argv[3].Split(',').ToArray() : new[] { "1066", "640" };
             return HomScan.Run(new GameContent(hargs), hargs, widths, outDir);
         }
         if (mode == "golden-write" || mode == "golden-check")
@@ -291,7 +291,7 @@ public static class Golden
 public sealed class ShotVideo : IVideo
 {
     private readonly Renderer r; private readonly byte[] buf;
-    public ShotVideo(Config c, GameContent content, int wide = 0) { r = new Renderer(c, content, wide); buf = new byte[4 * r.Width * r.Height]; }
+    public ShotVideo(Config c, GameContent content, int wide = 0, int lines = 0) { r = new Renderer(c, content, wide, lines); buf = new byte[4 * r.Width * r.Height]; }
     public int W => r.Width; public int H => r.Height;
     public void Render(Doom doom, Fixed frameFrac) { r.Render(doom, buf, frameFrac); }
     public byte[] Frame(Doom doom, Fixed frac) { r.Render(doom, buf, frac); return buf; }

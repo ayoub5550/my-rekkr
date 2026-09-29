@@ -25,6 +25,9 @@ namespace ManagedDoom.UnityPort
         public static bool SmoothLook = true;    // dev3: touch/gyro look applied every frame
         public static bool StablePerf;           // dev3: Android sustained performance mode
         public static int RenderThreads;         // dev3: 0 = auto (min(4, cores-1)), 1 = original single thread
+        public static int Resolution = 800;      // dev3: max frame lines 400/600/800/1000 (400 = v0.2.0)
+        public static bool DynamicRes = true;    // dev3: drop/raise lines to hold the frame rate
+        public static readonly int[] Resolutions = { 400, 600, 800, 1000 };
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -53,6 +56,8 @@ namespace ManagedDoom.UnityPort
             SmoothLook = PlayerPrefs.GetInt("smooth_look", 1) == 1;
             StablePerf = PlayerPrefs.GetInt("stable_perf", 0) == 1;
             RenderThreads = PlayerPrefs.GetInt("gfx_threads", 0);
+            Resolution = Mathf.Clamp(PlayerPrefs.GetInt("gfx_res", 800) / 200 * 200, 400, 1000);
+            DynamicRes = PlayerPrefs.GetInt("gfx_dynres", 1) == 1;
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -87,6 +92,8 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("smooth_look", SmoothLook ? 1 : 0);
             PlayerPrefs.SetInt("stable_perf", StablePerf ? 1 : 0);
             PlayerPrefs.SetInt("gfx_threads", RenderThreads);
+            PlayerPrefs.SetInt("gfx_res", Resolution);
+            PlayerPrefs.SetInt("gfx_dynres", DynamicRes ? 1 : 0);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {
