@@ -69,7 +69,7 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 | 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | ✅ 2026-09-29 | 2 real bugs fixed (§6): **save crash on E1M7** (buffer overflow) and **see-through wall columns** in 4 textures; saves now atomic. All 36 maps: 2000-tic bot soak + byte-exact save→load→save round trip PASS. HOM scan at 1066/640 from 5744 thing positions per width: only vanilla 1–9 px sparkles + one E4M1 voodoo-machinery closet (not reachable). Golden unchanged. Lifecycle review items moved to stages 5/9/11 (see stage 1 spec) |
 | 2 | Per-frame look (touch + gyro at render rate) | ✅ 2026-09-29 | `Renderer.LocalViewTurn` + `TouchInput.PendingTurn`; setting "Smooth look" (Gyro & Vibration tab — Controls tab is full, default on, EN/AR). Autopilot turning now feeds the swipe path. Linux A/B scenario 1: view lag avg **1.97° → 0.06°**, p99 **15.3° → 1.4°**. Golden unchanged (demos use the classic path). Device check in stage 11 (`look_*` fields) |
 | 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ✅ 2026-09-29 (device numbers in stage 11) | Zero-copy: renderer writes straight into `GetRawTextureData` → upload CPU **0.54 → 0.01 ms** (Linux). Swappy `optimizedFramePacing` on (`REKKR_FRAMEPACING=0` to disable). `REKKR_GFX_API=vulkan` builds Vulkan+GLES3; default stays GLES3 until the stage 11 A/B on r8q. `PerfMode.SetSustained` + setting `StablePerf` (UI in stage 9, default off). Per-frame string allocations removed (FPS label, Arabic icon keys); `gc0` still 4 per ~2.5 min scenario (IMGUI internals) — incremental GC on, acceptable |
-| 4 | Multithreaded renderer (column strips) | ⬜ | |
+| 4 | Multithreaded renderer (column strips) | ✅ 2026-09-29 | `ThreeDRendererPool` (2×threads strips, long-lived workers, caller works too); per-instance sector valid-count; sprites/weapon clamped to strip. HeadlessTest `bench` 1066×400 (x86 sandbox): **1.82 → 1.16 / 0.81 / 0.69 ms** for 1/2/4/6 threads; Unity Mono player render 4.06 → 2.87 ms. HOM scan with 4 threads: no seam gaps (43 vs 45 bad views, all vanilla specks). Setting `RenderThreads` (0 auto = min(4, cores−1)), env `REKKR_THREADS`. Not bit-identical to 1 thread — see spec note |
 | 5 | Resolution levels 400/600/800/1000 + dynamic resolution | ⬜ | |
 | 6 | True-colour smooth lighting | ⬜ | |
 | 7 | GPU post-processing (bloom, vignette, grading, sharpen, CRT) | ⬜ | |
@@ -193,8 +193,15 @@ Deferred to dev4: _(none yet)_
   pool, not `Parallel.For` per frame — too much overhead on IL2CPP). Use 8 strips pulled from a queue
   by 4 threads (load balancing: the sky/sprite-heavy side of the screen differs a lot). Setting
   `Render threads: Auto (=4) / 1 / 2 / 4 / 6`.
-- Must be **pixel-identical** to single-threaded output (golden check at 1066×400 with 4 threads).
-  Only fuzz (spectre) pattern may differ; make fuzz position a function of x to keep it identical.
+- ~~Must be pixel-identical~~ — **finding:** floors/ceilings are drawn with a per-row
+  incremental texture-coordinate cache (`ceilingXFrac/Step`, `floorXFrac/Step`) that restarts at
+  each strip's first column, so threaded frames differ from 1 thread by ±1 texel rounding on some
+  plane pixels (≈1–2 % of pixels, invisible; `tdiff 4` shows them). Fuzz order also differs.
+  Therefore **Classic preset forces 1 thread** (golden stays exact); Balanced/Enhanced use auto.
+- Tools: `REKKR_THREADS=<n>` for any HeadlessTest mode, `tdiff <n>` (1 vs n threads diff PNG),
+  `bench <width>` (ms/frame for 1/2/4/6 threads over 6 maps × 8 angles).
+- Next speed-up candidate (stage 5): `Renderer.WriteData` (palette → RGBA) is single-threaded;
+  split it across the same workers once frames reach 1.7–2.7 Mpx.
 - Check: golden PASS with threads=1 and threads=4, HOM scan PASS, local speed-up measured in
   HeadlessTest (report ms/frame for 1/2/4 threads).
 

@@ -228,3 +228,67 @@ public static class HoleFix
         return after == 0 || after < before / 20 ? 0 : 1;
     }
 }
+
+// Renderer speed: for each thread count, render the start views of several maps (8 angles each,
+// 30 frames per view) and report ms per frame. Usage: bench <width>[:<height>]
+public static class Bench
+{
+    public static int Run(GameContent content, CommandLineArgs args, string size)
+    {
+        var width = int.Parse(size.Split(':')[0]);
+        foreach (var threads in new[] { 1, 2, 4, 6 })
+        {
+            ThreeDRendererPool.Threads = threads;
+            var c = new Config(); c.video_highresolution = true; c.video_gamescreensize = 8;
+            var v = new ShotVideo(c, content, width); v.DisplayMessage = false;
+            var d = new Doom(args, c, content, v, null, null, null);
+            double total = 0; int frames = 0; double worst = 0;
+            foreach (var (e, m) in new[] { (1, 1), (1, 7), (2, 6), (3, 6), (4, 1), (4, 9) })
+            {
+                d.NewGame(GameSkill.Medium, e, m);
+                for (int t = 0; t < 140; t++) d.Update();
+                var mo = d.Game.World.ConsolePlayer.Mobj;
+                for (int a = 0; a < 8; a++)
+                {
+                    mo.Angle = new Angle((uint)(a * (uint.MaxValue / 8)));
+                    for (int f = 0; f < 30; f++)
+                    {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        v.Frame(d, Fixed.One);
+                        var ms = sw.Elapsed.TotalMilliseconds;
+                        if (f >= 3) { total += ms; frames++; worst = Math.Max(worst, ms); }
+                    }
+                }
+            }
+            Console.WriteLine($"bench w={width} threads={threads} ms_avg={total / frames:F3} ms_max={worst:F2} frames={frames}");
+        }
+        return 0;
+    }
+}
+
+// Compares 1-thread and N-thread renders of the same attract frames; prints differing pixels.
+public static class ThreadDiff
+{
+    public static int Run(GameContent content, CommandLineArgs args, int threads, string outDir)
+    {
+        WipeEffect.TestSeed = 1234;
+        ThreeDRendererPool.Threads = 1;
+        var c1 = new Config(); c1.video_highresolution = true; var v1 = new ShotVideo(c1, content, 1066);
+        var d1 = new Doom(args, c1, content, v1, null, null, null);
+        ThreeDRendererPool.Threads = threads;
+        var c2 = new Config(); c2.video_highresolution = true; var v2 = new ShotVideo(c2, content, 1066);
+        var d2 = new Doom(args, c2, content, v2, null, null, null);
+        int bad = 0;
+        for (int t = 0; t < 35 * 60; t++)
+        {
+            d1.Update(); d2.Update();
+            if (t % 105 != 50) continue;
+            var a = (byte[])v1.Frame(d1, Fixed.One).Clone(); var b = v2.Frame(d2, Fixed.One);
+            int n = 0, minX = int.MaxValue, maxX = -1, h = v1.H;
+            for (int i = 0; i < a.Length; i += 4) if (a[i] != b[i] || a[i + 1] != b[i + 1] || a[i + 2] != b[i + 2]) { n++; var x = (i / 4) / h; minX = Math.Min(minX, x); maxX = Math.Max(maxX, x); }
+            if (n > 0) { bad++; Console.WriteLine($"tdiff t={t} pixels={n} x={minX}..{maxX}"); if (bad == 1) { v1.Shot(d1, Path.Combine(outDir, "td_1.png")); v2.Shot(d2, Path.Combine(outDir, "td_n.png")); } }
+        }
+        Console.WriteLine($"tdiff threads={threads}: {bad} frames differ");
+        return bad == 0 ? 0 : 1;
+    }
+}

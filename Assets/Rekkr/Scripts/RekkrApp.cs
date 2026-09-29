@@ -88,6 +88,8 @@ public sealed partial class RekkrApp : MonoBehaviour
 
         RekkrSettings.Load();
         if (RekkrSettings.StablePerf) PerfMode.SetSustained(true);
+        var envThreads = Environment.GetEnvironmentVariable("REKKR_THREADS");   // desktop A/B
+        ThreeDRendererPool.Threads = string.IsNullOrEmpty(envThreads) ? RekkrSettings.RenderThreads : int.Parse(envThreads);
         Loc.Arabic = RekkrSettings.Arabic;
         status = Loc.T("loading");
         Haptics.Init();
@@ -167,7 +169,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             Doom = new Doom(args, config, content, video, sound, music, input);
             status = null;
             RefreshContinue();
-            Debug.Log($"[REKKR] started {Version} mode={content.Wad.GameMode} frame={video.FrameWidth}x{video.FrameHeight} testLoop={testLoop} lang={(Loc.Arabic ? "ar" : "en")}");
+            Debug.Log($"[REKKR] started {Version} mode={content.Wad.GameMode} frame={video.FrameWidth}x{video.FrameHeight} threads={video.RenderThreads} cores={SystemInfo.processorCount} testLoop={testLoop} lang={(Loc.Arabic ? "ar" : "en")}");
         }
         catch (Exception e)
         {

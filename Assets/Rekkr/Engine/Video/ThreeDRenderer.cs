@@ -493,8 +493,8 @@ namespace ManagedDoom.Video
             }
 
             clipRanges[0].First = -0x7fffffff;
-            clipRanges[0].Last = -1;
-            clipRanges[1].First = windowWidth;
+            clipRanges[0].Last = StripLeft - 1;
+            clipRanges[1].First = StripRight;
             clipRanges[1].Last = 0x7fffffff;
             clipRangeCount = 2;
 
@@ -719,6 +719,22 @@ namespace ManagedDoom.Video
 
         private int validCount;
 
+        // my-rekkr dev3 stage 4: this instance may render only the columns [stripX0, stripX1) of the
+        // window (several instances render strips in parallel, see ThreeDRendererPool).
+        private int stripX0 = 0;
+        private int stripX1 = int.MaxValue;
+        private bool drawBackScreen = true;
+        private int[] sectorValid = Array.Empty<int>();   // per-instance Sector.ValidCount
+        private int localValidCount;
+
+        public void SetStrip(int x0, int x1, bool drawBackScreen)
+        {
+            stripX0 = x0; stripX1 = x1; this.drawBackScreen = drawBackScreen;
+        }
+
+        private int StripLeft => Math.Max(0, stripX0);
+        private int StripRight => Math.Min(windowWidth, stripX1);   // exclusive
+
 
 
         public void Render(Player player, Fixed frameFrac) => Render(player, frameFrac, null);
@@ -739,7 +755,10 @@ namespace ManagedDoom.Video
             viewSin = Trig.Sin(viewAngle);
             viewCos = Trig.Cos(viewAngle);
 
-            validCount = world.GetNewValidCount();
+            // Per-instance counter + array instead of the shared Sector.ValidCount, so parallel
+            // strip renderers never write shared state (same result as vanilla for one instance).
+            if (sectorValid.Length != world.Map.Sectors.Length) { sectorValid = new int[world.Map.Sectors.Length]; localValidCount = 0; }
+            validCount = ++localValidCount;
 
             extraLight = player.ExtraLight;
             fixedColorMap = player.FixedColorMap;
@@ -754,7 +773,7 @@ namespace ManagedDoom.Video
             RenderMaskedTextures();
             DrawPlayerSprites(player);
 
-            if (windowSize < 7)
+            if (windowSize < 7 && drawBackScreen)
             {
                 FillBackScreen();
             }
@@ -2466,13 +2485,13 @@ namespace ManagedDoom.Video
             // BSP is traversed by subsector.
             // A sector might have been split into several subsectors during BSP building.
             // Thus we check whether its already added.
-            if (sector.ValidCount == validCount)
+            if (sectorValid[sector.Number] == validCount)
             {
                 return;
             }
 
             // Well, now it will be done.
-            sector.ValidCount = validCount;
+            sectorValid[sector.Number] = validCount;
 
             var spriteLightLevel = (sector.LightLevel >> lightSegShift) + extraLight;
             var spriteLights = scaleLight[Math.Clamp(spriteLightLevel, 0, lightLevelCount - 1)];
@@ -2548,8 +2567,8 @@ namespace ManagedDoom.Video
             tx -= Fixed.FromInt(lump.LeftOffset);
             var x1 = (centerXFrac + (tx * xScale)).Data >> Fixed.FracBits;
 
-            // Off the right side?
-            if (x1 > windowWidth)
+            // Off the right side? (of this instance's strip)
+            if (x1 > windowWidth || x1 >= StripRight)
             {
                 return;
             }
@@ -2557,8 +2576,8 @@ namespace ManagedDoom.Video
             tx += Fixed.FromInt(lump.Width);
             var x2 = ((centerXFrac + (tx * xScale)).Data >> Fixed.FracBits) - 1;
 
-            // Off the left side?
-            if (x2 < 0)
+            // Off the left side? (of this instance's strip)
+            if (x2 < StripLeft)
             {
                 return;
             }
@@ -2574,8 +2593,8 @@ namespace ManagedDoom.Video
             vis.GlobalBottomZ = thingZ;
             vis.GlobalTopZ = thingZ + Fixed.FromInt(lump.TopOffset);
             vis.TextureAlt = vis.GlobalTopZ - viewZ;
-            vis.X1 = x1 < 0 ? 0 : x1;
-            vis.X2 = x2 >= windowWidth ? windowWidth - 1 : x2;
+            vis.X1 = x1 < StripLeft ? StripLeft : x1;
+            vis.X2 = x2 >= StripRight ? StripRight - 1 : x2;
 
             var invScale = Fixed.One / xScale;
 
@@ -2830,8 +2849,8 @@ namespace ManagedDoom.Video
             tx -= Fixed.FromInt(lump.LeftOffset);
             var x1 = (centerXFrac + tx * weaponScale).Data >> Fixed.FracBits;
 
-            // Off the right side?
-            if (x1 > windowWidth)
+            // Off the right side? (of this instance's strip)
+            if (x1 > windowWidth || x1 >= StripRight)
             {
                 return;
             }
@@ -2839,8 +2858,8 @@ namespace ManagedDoom.Video
             tx += Fixed.FromInt(lump.Width);
             var x2 = ((centerXFrac + tx * weaponScale).Data >> Fixed.FracBits) - 1;
 
-            // Off the left side?
-            if (x2 < 0)
+            // Off the left side? (of this instance's strip)
+            if (x2 < StripLeft)
             {
                 return;
             }
@@ -2850,8 +2869,8 @@ namespace ManagedDoom.Video
             vis.MobjFlags = 0;
             // The code below is based on Crispy Doom's weapon rendering code.
             vis.TextureAlt = Fixed.FromInt(100) + Fixed.One / 4 - (psp.Sy - Fixed.FromInt(lump.TopOffset));
-            vis.X1 = x1 < 0 ? 0 : x1;
-            vis.X2 = x2 >= windowWidth ? windowWidth - 1 : x2;
+            vis.X1 = x1 < StripLeft ? StripLeft : x1;
+            vis.X2 = x2 >= StripRight ? StripRight - 1 : x2;
             vis.Scale = weaponScale;
 
             if (flip)
@@ -2970,6 +2989,8 @@ namespace ManagedDoom.Video
         }
 
 
+
+        public int WindowWidth => windowWidth;
 
         public int WindowSize
         {

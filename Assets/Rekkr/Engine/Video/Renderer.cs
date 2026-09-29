@@ -44,7 +44,7 @@ namespace ManagedDoom.Video
         private DrawScreen screen;
 
         private MenuRenderer menu;
-        private ThreeDRenderer threeD;
+        private ThreeDRendererPool threeD;   // my-rekkr dev3: parallel strips (1 thread = original)
         private StatusBarRenderer statusBar;
         private IntermissionRenderer intermission;
         private OpeningSequenceRenderer openingSequence;
@@ -85,7 +85,7 @@ namespace ManagedDoom.Video
             config.video_gammacorrection = Math.Clamp(config.video_gammacorrection, 0, MaxGammaCorrectionLevel);
 
             menu = new MenuRenderer(content.Wad, screen);
-            threeD = new ThreeDRenderer(content, screen, config.video_gamescreensize);
+            threeD = new ThreeDRendererPool(content, screen, config.video_gamescreensize);
             statusBar = new StatusBarRenderer(content.Wad, screen);
             intermission = new IntermissionRenderer(content.Wad, screen);
             openingSequence = new OpeningSequenceRenderer(content.Wad, screen, this);
@@ -184,6 +184,11 @@ namespace ManagedDoom.Video
         /// angle, so touch/gyro look is applied every rendered frame (the sim is unchanged). The app
         /// sets it only for a live game (never for demos).</summary>
         public Angle? LocalViewTurn;
+
+        public int RenderThreads => threeD.ThreadCount;
+
+        /// <summary>Stops the render worker threads (call when the renderer is replaced).</summary>
+        public void Dispose() => threeD.Dispose();
 
         public void RenderGame(DoomGame game, Fixed frameFrac)
         {

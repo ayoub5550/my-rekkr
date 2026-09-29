@@ -24,6 +24,7 @@ namespace ManagedDoom.UnityPort
         public static bool Arabic;
         public static bool SmoothLook = true;    // dev3: touch/gyro look applied every frame
         public static bool StablePerf;           // dev3: Android sustained performance mode
+        public static int RenderThreads;         // dev3: 0 = auto (min(4, cores-1)), 1 = original single thread
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -51,6 +52,7 @@ namespace ManagedDoom.UnityPort
             MusicHQ = PlayerPrefs.GetInt("music_hq", 1) == 1;
             SmoothLook = PlayerPrefs.GetInt("smooth_look", 1) == 1;
             StablePerf = PlayerPrefs.GetInt("stable_perf", 0) == 1;
+            RenderThreads = PlayerPrefs.GetInt("gfx_threads", 0);
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -84,6 +86,7 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("music_hq", MusicHQ ? 1 : 0);
             PlayerPrefs.SetInt("smooth_look", SmoothLook ? 1 : 0);
             PlayerPrefs.SetInt("stable_perf", StablePerf ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_threads", RenderThreads);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

@@ -22,6 +22,19 @@ public static class Program
         ConfigUtilities.DataDirectory = Path.GetFullPath(outDir);
         int failures = 0;
         var mode = argv.Length > 2 ? argv[2] : "all";
+        var thr = Environment.GetEnvironmentVariable("REKKR_THREADS");
+        ThreeDRendererPool.Threads = string.IsNullOrEmpty(thr) ? 1 : int.Parse(thr);
+        Console.WriteLine($"render threads={(ThreeDRendererPool.Threads > 0 ? ThreeDRendererPool.Threads : ThreeDRendererPool.AutoThreads)}");
+        if (mode == "tdiff")
+        {
+            var targs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return ThreadDiff.Run(new GameContent(targs), targs, argv.Length > 3 ? int.Parse(argv[3]) : 4, outDir);
+        }
+        if (mode == "bench")
+        {
+            var bargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return Bench.Run(new GameContent(bargs), bargs, argv.Length > 3 ? argv[3] : "1066");
+        }
         var goldenPath = argv.Length > 3 ? argv[3] : Path.Combine(AppContext.BaseDirectory, "../../../golden.txt");
         if (mode == "secinfo")
         {

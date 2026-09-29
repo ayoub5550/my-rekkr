@@ -28,6 +28,7 @@ namespace ManagedDoom.UnityPort
         private void Create(int wide)
         {
             wideWidth = wide;
+            renderer?.Dispose();
             renderer = new Renderer(config, content, wide);
             frame = new byte[4 * renderer.Width * renderer.Height];
             if (texture != null) UnityEngine.Object.Destroy(texture);
@@ -50,6 +51,7 @@ namespace ManagedDoom.UnityPort
         public static bool ZeroCopy = true;
 
         public Texture2D Texture => texture;
+        public int RenderThreads => renderer.RenderThreads;
         public int FrameWidth => renderer.Width;
         public int FrameHeight => renderer.Height;
         public int CenterOffset => renderer.CenterOffset;
