@@ -65,6 +65,11 @@ public static class Program
             var widths = argv.Length > 3 ? argv[3].Split(',').ToArray() : new[] { "1066", "640" };
             return HomScan.Run(new GameContent(hargs), hargs, widths, outDir);
         }
+        if (mode == "dev5")
+        {
+            var dargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return Dev5Test.Run(new GameContent(dargs), dargs, outDir);
+        }
         if (mode == "dev4")
         {
             var dargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });

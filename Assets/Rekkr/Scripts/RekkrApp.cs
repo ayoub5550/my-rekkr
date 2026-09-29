@@ -34,6 +34,7 @@ public sealed partial class RekkrApp : MonoBehaviour
 
     private Material screenMat;
     private PostFx postFx;
+    private WorldFx worldFx;   // dev5
     private bool postThisFrame;
     private Texture2D texBtn, texBtnPressed, texStickBase, texStickKnob, texWhite;
     private readonly Dictionary<string, Texture2D> icons = new Dictionary<string, Texture2D>();
@@ -126,6 +127,9 @@ public sealed partial class RekkrApp : MonoBehaviour
             RekkrSettings.Sharpen = false; RekkrSettings.Crt = false; RekkrSettings.SideFill = false;
         }
         if (Environment.GetEnvironmentVariable("REKKR_CRT") == "1") RekkrSettings.Crt = true;
+        var envPreset = Environment.GetEnvironmentVariable("REKKR_PRESET");   // desktop/test: force a graphics preset
+        if (!string.IsNullOrEmpty(envPreset)) RekkrSettings.ApplyPreset(int.Parse(envPreset));
+        WorldFx.DebugView = Environment.GetEnvironmentVariable("REKKR_GBUF") == "1";
         var envLight = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR");
         if (!string.IsNullOrEmpty(envLight)) RekkrSettings.SmoothLighting = envLight == "1";
     }
@@ -287,7 +291,14 @@ public sealed partial class RekkrApp : MonoBehaviour
             ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
             postThisFrame = PostFx.Active;
-            if (postThisFrame) postFx.Process(video, gameRect);
+            UnityEngine.Texture frameTex = null;
+            if (WorldFx.Active)
+            {
+                worldFx ??= new WorldFx(content);
+                frameTex = worldFx.Process(video, Doom, InLevel && !Doom.Game.World.AutoMap.Visible, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            }
+            else ThreeDRenderer.SkyDriftBam = 0;
+            if (postThisFrame) postFx.Process(video, gameRect, frameTex);
             if (testLoop) TrackViewAngle(frac);
             UpdateDynamicResolution();
         }
@@ -469,6 +480,27 @@ public sealed partial class RekkrApp : MonoBehaviour
         return true;
     }
     public void Continue() => LoadLatest();
+
+    // ------------------------------------------------------------------ dev5 automap touch
+
+    public bool AutomapOpen => InLevel && !settingsOpen && Doom.Game.World.AutoMap.Visible;
+
+    private float AutomapUnitsPerScreenPx()
+    {
+        var am = Doom.Game.World.AutoMap;
+        var scale = Mathf.Max(1, video.FrameHeight / 200);
+        return video.FrameHeight / Mathf.Max(1F, gameRect.height) * 16F / (am.Zoom.ToFloat() * scale);
+    }
+
+    public void AutomapPan(Vector2 screenDelta)
+    {
+        var k = AutomapUnitsPerScreenPx();
+        Doom.Game.World.AutoMap.TouchPan(-screenDelta.x * k, screenDelta.y * k);
+    }
+
+    public void AutomapZoom(float factor) => Doom.Game.World.AutoMap.TouchZoom(Mathf.Clamp(factor, 0.8F, 1.25F));
+
+    public void AutomapFollow() { Doom.Game.World.AutoMap.SetFollow(true); Haptics.Pulse(10, 80); }
 
     private void LoadLatest()
     {

@@ -36,6 +36,7 @@ namespace ManagedDoom.Video
         /// levels) of each 3D-view pixel, written next to the classic palette index. Null when off.</summary>
         public byte[] TexData;
         public ushort[] LightData;
+        public byte[] GData;   // my-rekkr dev5 G-buffer (alpha codes)
 
         public DrawScreen(Wad wad, int width, int height)
         {
@@ -150,6 +151,7 @@ namespace ManagedDoom.Video
                 for (; i < drawLength; i++)
                 {
                     data[p] = column.Data[sourceIndex + frac.ToIntFloor()];
+                    if (GData != null) GData[p] = 255;   // dev5: 2D over the 3D view
                     p++;
                     frac += step;
                 }
@@ -363,6 +365,7 @@ namespace ManagedDoom.Video
                 for (var i = 0; i < h; i++)
                 {
                     data[pos] = (byte)color;
+                    if (GData != null) GData[pos] = 255;
                     pos++;
                 }
             }
@@ -384,6 +387,7 @@ namespace ManagedDoom.Video
                 for (var drawY = y1; drawY < y2; drawY++)
                 {
                     data[pos] = map[data[pos]];
+                    if (GData != null) GData[pos] = 255;
                     pos++;
                 }
             }
@@ -504,11 +508,14 @@ namespace ManagedDoom.Video
         private void Plot(int x, int y, int color)
         {
             var t = LineThickness;
-            if (t == 1) { data[height * x + y] = (byte)color; return; }
+            if (t == 1) { data[height * x + y] = (byte)color; if (GData != null) GData[height * x + y] = 255; return; }
             var x2 = Math.Min(width, x + t); var y2 = Math.Min(height, y + t);
             for (var px = x; px < x2; px++)
                 for (var py = y; py < y2; py++)
+                {
                     data[height * px + py] = (byte)color;
+                    if (GData != null) GData[height * px + py] = 255;
+                }
         }
 
         private void Bresenham(int x1, int y1, int x2, int y2, int color)

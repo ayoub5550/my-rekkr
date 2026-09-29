@@ -44,11 +44,16 @@ and how far away it is — the same information Minecraft shader packs get from 
 | Alpha code | Meaning |
 |---|---|
 | 0–199 | solid 3D pixel (wall, flat, sprite); depth `z = 8 · 2^(code/19.9)` map units (8…8192, log) |
-| 200–231 | **water-like liquid** floor (blue flats); depth code = `(code−200)·199/31` |
-| 232–247 | **hot/toxic liquid** (lava, slime, sludge: red/orange/green animated flats); depth `(code−232)·199/15` |
+| 200–223 | **water** (blue animated flats: REKKR `FWATER*`); depth code = `(code−200)·200/24` |
+| 224–235 | **murky liquid** (dull animated flats: REKKR `BLOOD*` = olive swamp); depth `(code−224)·200/12` |
+| 236–247 | **hot/toxic liquid** (red/green animated flats: `LAVA*`, `NUKAGE*`); depth `(code−236)·200/12` |
 | 248 | sky |
 | 249 | player weapon (psprite) |
 | 255 | not 3D (HUD, status bar, menu, border, overdraw, fuzz) → no effects |
+
+Implementation: `Engine/Video/GBuffer.cs` (codes, depth encode/decode, flat classification),
+`DrawScreen.GData` (2D drawing marks its pixels 255), `Renderer.WriteChunk` (alpha = code; a pixel
+whose palette index is not any COLORMAP row of its texel is treated as overdrawn → 255).
 
 - Written in `ThreeDRenderer` next to the existing true-colour `texData/lightData` writes (so the
   G-buffer exists only when **smooth lighting** is on — Balanced/Enhanced/Masterpiece). Per-column
@@ -79,14 +84,14 @@ GPU chain (`Scripts/WorldFx.cs` + `Resources/Rekkr/RekkrWorld.shader`), all in *
 | # | Stage | Status | Notes / measured |
 |---|---|---|---|
 | 0 | Plan, branch, version 0.5.0 / versionCode 5, DEV6 plan doc | ✅ 2026-09-29 | `RekkrApp.Version` 0.5.0, bundleVersion 0.5.0 / code 5; `docs/DEV6.md` written (GPU 3D renderer + extruded/voxel things) |
-| 1 | dev4 carry-overs: automap touch (pan/pinch zoom/follow), weapon wheel | ⬜ | |
-| 2 | G-buffer in the software renderer + liquid classification + `LastView`; WorldFx skeleton | ⬜ | |
-| 3 | Living sky: drifting sky, cloud layer, sun glow, sun rays | ⬜ | |
-| 4 | Real water + hot liquids | ⬜ | |
-| 5 | Atmosphere: fog, weather (rain/snow/embers/dust), lightning | ⬜ | |
-| 6 | Dynamic lights (fullbright things, muzzle flash) | ⬜ | |
-| 7 | Particles (sparks, blood, splashes, embers) | ⬜ | |
-| 8 | Voxile look: AO, filmic grade, DoF, Masterpiece preset, GRAPHICS tab page 2 | ⬜ | |
+| 1 | dev4 carry-overs: automap touch (pan/pinch zoom/follow), weapon wheel | ✅ 2026-09-29 | `AutoMap.TouchPan/TouchZoom/SetFollow`; Look finger drags = pan, 2 fingers = pinch, double-tap = follow. WEAPON buttons: tap (on release) = next/prev, hold 0.25 s = wheel (`TouchInput.WheelOpen/WheelItems`, icons = pickup sprites read from the WAD, `RekkrApp.UI.DrawWheel`). Linux scenario 5: wheel 8 items, chose Shotgun → ready=Shotgun; automap zoom 1.00→2.99, follow off after pan, on after double-tap |
+| 2 | G-buffer in the software renderer + liquid classification + `LastView`; WorldFx skeleton | ✅ 2026-09-29 | HeadlessTest `dev5`: 49 liquid flats (water 21, murky 3, hot 25), alpha = code everywhere (0 mismatches), depth order OK, false-colour shots reviewed (walls/floors grey by depth, water blue, sky cyan, weapon magenta). Golden 176 frames identical |
+| 3 | Living sky: drifting sky, cloud layer, sun glow, sun rays | ✅ 2026-09-29 | `ThreeDRenderer.SkyDriftBam` (per-episode speed), fbm clouds on a sky plane tinted per episode, sun glow, 20-tap half-res rays. Tuned after screenshot review (rays ×0.9, scatter 0.18) |
+| 4 | Real water + hot liquids | ✅ 2026-09-29 | Shore scan (≤ 64 taps + 3 refine; weapon/HUD pixels are looked through), mirrored row + ripples (world-anchored noise, eye height 41), fresnel, sparkles (sparse after review), foam, rain rings; murky = 35 % reflection; hot = flow warp + pulse (bloom glow). Note: E3's magenta floor is REKKR's own non-animated art (unchanged) |
+| 5 | Atmosphere: fog, weather (rain/snow/embers/dust), lightning | ✅ 2026-09-29 | Exp fog (light 1/2600, medium 1/1300 × episode), weather layers occluded by depth, outdoors only (player sector ceiling = sky, 0.5 s fade), lightning in rain (2 flashes every 7–20 s). Auto: E1 clear, E2 rain, E3 embers, E4 dust |
+| 6 | Dynamic lights (fullbright things, muzzle flash) | ✅ 2026-09-29 | ≤ 8 nearest fullbright mobjs within 1500 u (colour = bright-pixel average of the sprite, cached), muzzle flash from `ExtraLight`. Linux E3M1: 6 lights |
+| 7 | Particles (sparks, blood, splashes, embers) | ✅ 2026-09-29 | ≤ 512, puffs → 8 sparks, blood → 6 drops, splashes when walking in water/murky, embers from hot floors near the player; GL quads depth-tested against the G-buffer (pass 4) |
+| 8 | Voxile look: AO, filmic grade, DoF, Masterpiece preset, GRAPHICS tab page 2 | ✅ 2026-09-29 | AO 8 taps (strength 0.55), grade 3 "VOXILE (FILMIC)" (ACES fit + split tone), DoF (off by default). Presets: 3 = Masterpiece, Custom moved to 4 (`dev5_migrated`); Enhanced users on ≥ 8-core phones move to Masterpiece once; new installs: ≥ 8 cores → Masterpiece. GRAPHICS pages 3–4 (world effects). Test scenario 5 = Masterpiece tour |
 | 9 | Build 0.5.0, QA, Test Lab (r8q + a weaker device), video, release (byte-verified), report | ⬜ | |
 
 Legend: ⬜ not started · 🚧 in progress (see Next:) · ✅ done · ⏭ deferred (reason).

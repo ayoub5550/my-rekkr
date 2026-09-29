@@ -57,6 +57,7 @@ public sealed partial class RekkrApp
             }
             DrawCrosshair();
             DrawControls();
+            if (input.WheelOpen && !settingsOpen) DrawWheel();
             if (input.TitleMode && !settingsOpen)
             {
                 var a = 0.55F + 0.45F * Mathf.Sin(Time.unscaledTime * 3.2F);
@@ -153,6 +154,103 @@ public sealed partial class RekkrApp
     }
 
     // ------------------------------------------------------------------ touch controls
+
+    // ------------------------------------------------------------------ dev5 weapon wheel
+
+    private readonly System.Collections.Generic.Dictionary<WeaponType, Texture2D> weaponIcons =
+        new System.Collections.Generic.Dictionary<WeaponType, Texture2D>();
+    private byte[] playpalRaw;
+
+    /// <summary>Weapon icon from the WAD at runtime: the pickup sprite (or the hand sprite for fist/pistol).</summary>
+    private Texture2D WeaponIcon(WeaponType w)
+    {
+        if (weaponIcons.TryGetValue(w, out var tex)) return tex;
+        tex = null;
+        try
+        {
+            ManagedDoom.Sprite sp;
+            switch (w)
+            {
+                case WeaponType.Fist: sp = ManagedDoom.Sprite.PUNG; break;
+                case WeaponType.Pistol: sp = ManagedDoom.Sprite.PISG; break;
+                case WeaponType.Chainsaw: sp = ManagedDoom.Sprite.CSAW; break;
+                case WeaponType.Shotgun: sp = ManagedDoom.Sprite.SHOT; break;
+                case WeaponType.SuperShotgun: sp = ManagedDoom.Sprite.SGN2; break;
+                case WeaponType.Chaingun: sp = ManagedDoom.Sprite.MGUN; break;
+                case WeaponType.Missile: sp = ManagedDoom.Sprite.LAUN; break;
+                case WeaponType.Plasma: sp = ManagedDoom.Sprite.PLAS; break;
+                default: sp = ManagedDoom.Sprite.BFUG; break;
+            }
+            playpalRaw ??= content.Wad.ReadLump("PLAYPAL");
+            var patch = content.Sprites[sp].Frames[0].Patches[0];
+            int pw = patch.Width, ph = patch.Height;
+            var px = new Color32[pw * ph];
+            for (var x = 0; x < pw; x++)
+                foreach (var col in patch.Columns[x])
+                    for (var i = 0; i < col.Length; i++)
+                    {
+                        var y = col.TopDelta + i;
+                        if (y < 0 || y >= ph) continue;
+                        var c = col.Data[col.Offset + i];
+                        px[(ph - 1 - y) * pw + x] = new Color32(playpalRaw[3 * c], playpalRaw[3 * c + 1], playpalRaw[3 * c + 2], 255);
+                    }
+            tex = new Texture2D(pw, ph, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+        }
+        catch (System.Exception e) { Debug.LogWarning("weapon icon " + w + ": " + e.Message); }
+        weaponIcons[w] = tex;
+        return tex;
+    }
+
+    private void DrawWheel()
+    {
+        float H = Screen.height;
+        var items = input.WheelItems;
+        var n = items.Count;
+        if (n == 0) return;
+        var c = gameRect.center;
+        var R = H * 0.27F;
+        var cell = H * 0.19F;
+        GUI.color = new Color(0, 0, 0, 0.45F);
+        GUI.DrawTexture(new Rect(c.x - R - cell * 0.7F, c.y - R - cell * 0.7F, 2 * (R + cell * 0.7F), 2 * (R + cell * 0.7F)), texStickBase);
+        GUI.color = Color.white;
+        for (var i = 0; i < n; i++)
+        {
+            var a = i * Mathf.PI * 2 / n;
+            var pos = c + new Vector2(Mathf.Sin(a), -Mathf.Cos(a)) * R;
+            var sel = i == input.WheelSel;
+            var usable = input.WheelUsable[i];
+            var sz = sel ? cell * 1.18F : cell;
+            var r = new Rect(pos.x - sz / 2, pos.y - sz / 2, sz, sz);
+            GUI.color = new Color(1, 1, 1, usable ? 1F : 0.45F);
+            GUI.DrawTexture(r, sel ? texBtnPressed : texBtn);
+            var icon = WeaponIcon(items[i]);
+            if (icon != null)
+            {
+                var k = Mathf.Min(sz * 0.62F / icon.width, sz * 0.5F / icon.height);
+                var iw = icon.width * k; var ih = icon.height * k * 1.2F;   // Doom pixels are 1.2x tall
+                GUI.DrawTexture(new Rect(pos.x - iw / 2, pos.y - ih / 2 - sz * 0.04F, iw, ih), icon);
+            }
+            GUI.color = Color.white;
+            var slot = WeaponSlotNumber(items[i]);
+            skin.Text(new Rect(r.x, r.yMax - sz * 0.34F, r.width, sz * 0.22F), slot.ToString(), PxSmall, TextAnchor.MiddleCenter, sel ? Ink.Red : Ink.Bone);
+        }
+    }
+
+    private static int WeaponSlotNumber(WeaponType w)
+    {
+        switch (w)
+        {
+            case WeaponType.Fist: case WeaponType.Chainsaw: return 1;
+            case WeaponType.Pistol: return 2;
+            case WeaponType.Shotgun: case WeaponType.SuperShotgun: return 3;
+            case WeaponType.Chaingun: return 4;
+            case WeaponType.Missile: return 5;
+            case WeaponType.Plasma: return 6;
+            default: return 7;
+        }
+    }
 
     private void DrawControls()
     {
@@ -364,12 +462,13 @@ public sealed partial class RekkrApp
 
     private void DrawGraphicsTab()
     {
+        var next = Loc.Arabic ? "< " + Loc.T("gfx_next") : Loc.T("gfx_next") + " >";
         if (gfxPage == 0)
         {
             var preset = RekkrSettings.GfxPreset;
             if (Cycle(Loc.T("preset"), Loc.T("preset_" + preset)))
             {
-                ApplyPreset(preset >= 2 ? 0 : preset + 1);   // Classic -> Balanced -> Enhanced -> Classic
+                ApplyPreset(preset >= 3 ? 0 : preset + 1);   // Classic -> Balanced -> Enhanced -> Masterpiece -> Classic
             }
             var resIdx = System.Array.IndexOf(RekkrSettings.Resolutions, RekkrSettings.Resolution);
             if (Cycle(Loc.T("resolution"), RekkrSettings.Resolution + (RekkrSettings.DynamicRes ? "  (" + video.Lines + ")" : ""), true))
@@ -384,11 +483,12 @@ public sealed partial class RekkrApp
             var sp = Toggle(Loc.T("stable_perf"), RekkrSettings.StablePerf);
             if (sp != RekkrSettings.StablePerf) { RekkrSettings.StablePerf = sp; PerfMode.SetSustained(sp); }
             if (ActionRow(Loc.T("gfx_more"), Loc.T("gfx_open"))) gfxPage = 1;
+            if (CornerButton(next)) gfxPage = 2;
         }
-        else
+        else if (gfxPage == 1)
         {
             if (Cycle(Loc.T("bloom"), Loc.T("lvl_" + RekkrSettings.Bloom))) { RekkrSettings.Bloom = (RekkrSettings.Bloom + 1) % 4; MarkCustom(); }
-            if (Cycle(Loc.T("grade"), Loc.T("grade_" + RekkrSettings.ColorGrade))) { RekkrSettings.ColorGrade = (RekkrSettings.ColorGrade + 1) % 3; MarkCustom(); }
+            if (Cycle(Loc.T("grade"), Loc.T("grade_" + RekkrSettings.ColorGrade))) { RekkrSettings.ColorGrade = (RekkrSettings.ColorGrade + 1) % 4; MarkCustom(); }
             var v = Stepper(Loc.T("vignette"), RekkrSettings.Vignette, 0, 30, 5, "%");
             if (v != RekkrSettings.Vignette) { RekkrSettings.Vignette = v; MarkCustom(); }
             var sh = Toggle(Loc.T("sharpen"), RekkrSettings.Sharpen);
@@ -397,6 +497,34 @@ public sealed partial class RekkrApp
             if (crt != RekkrSettings.Crt) { RekkrSettings.Crt = crt; MarkCustom(); }
             var sf = Toggle(Loc.T("sidefill"), RekkrSettings.SideFill);
             if (sf != RekkrSettings.SideFill) { RekkrSettings.SideFill = sf; MarkCustom(); }
+            if (CornerButton(next)) gfxPage = 2;
+        }
+        else if (gfxPage == 2)
+        {
+            // dev5 world effects, page 1 of 2
+            var a = Toggle(Loc.T("fx_sky"), RekkrSettings.SkyFx);
+            if (a != RekkrSettings.SkyFx) { RekkrSettings.SkyFx = a; MarkCustom(); }
+            var b = Toggle(Loc.T("fx_water"), RekkrSettings.WaterFx);
+            if (b != RekkrSettings.WaterFx) { RekkrSettings.WaterFx = b; MarkCustom(); }
+            if (Cycle(Loc.T("fx_weather"), Loc.T("weather_" + RekkrSettings.Weather))) { RekkrSettings.Weather = (RekkrSettings.Weather + 1) % 4; MarkCustom(); }
+            if (Cycle(Loc.T("fx_fog"), Loc.T("lvl_" + RekkrSettings.Fog))) { RekkrSettings.Fog = (RekkrSettings.Fog + 1) % 3; MarkCustom(); }
+            var c = Toggle(Loc.T("fx_lights"), RekkrSettings.DynLights);
+            if (c != RekkrSettings.DynLights) { RekkrSettings.DynLights = c; MarkCustom(); }
+            var d = Toggle(Loc.T("fx_rays"), RekkrSettings.SunRays);
+            if (d != RekkrSettings.SunRays) { RekkrSettings.SunRays = d; MarkCustom(); }
+            if (!RekkrSettings.SmoothLighting) Hint(Loc.T("fx_needs_light"));
+            if (CornerButton(next)) gfxPage = 3;
+        }
+        else
+        {
+            // dev5 world effects, page 2 of 2
+            var a = Toggle(Loc.T("fx_ao"), RekkrSettings.AO);
+            if (a != RekkrSettings.AO) { RekkrSettings.AO = a; MarkCustom(); }
+            var b = Toggle(Loc.T("fx_particles"), RekkrSettings.Particles);
+            if (b != RekkrSettings.Particles) { RekkrSettings.Particles = b; MarkCustom(); }
+            var c = Toggle(Loc.T("fx_dof"), RekkrSettings.DoF);
+            if (c != RekkrSettings.DoF) { RekkrSettings.DoF = c; MarkCustom(); }
+            if (!RekkrSettings.SmoothLighting) Hint(Loc.T("fx_needs_light"));
             if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) gfxPage = 0;
         }
     }

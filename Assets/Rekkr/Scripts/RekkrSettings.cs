@@ -42,25 +42,43 @@ namespace ManagedDoom.UnityPort
         public static int StickMode;             // dev4: 0 fixed, 1 floating
         public static int Crosshair;             // dev4: 0 + bone, 1 + red, 2 + green, 3 dot, 4 off
         public const int CrosshairStyles = 5;
-        public static int GfxPreset = 2;         // dev3: 0 Classic, 1 Balanced, 2 Enhanced, 3 Custom
+        public static int GfxPreset = 2;         // dev3: 0 Classic, 1 Balanced, 2 Enhanced, dev5: 3 Masterpiece, 4 Custom
+        public const int PresetCustom = 4;
+        // dev5 "Masterpiece" world effects (need smooth lighting: they read the G-buffer).
+        public static bool SkyFx;                // animated sky: drift + cloud layer + sun glow
+        public static bool WaterFx;              // real water: reflections, ripples, foam; hot liquids glow
+        public static int Weather = 3;           // 0 auto (per episode), 1 rain, 2 snow, 3 off
+        public static int Fog;                   // 0 off, 1 light, 2 medium
+        public static bool DynLights;            // fireballs / torches / muzzle flash light the world
+        public static bool SunRays;              // god rays from the sun
+        public static bool AO;                   // ambient occlusion in corners
+        public static bool Particles;            // sparks, blood drops, splashes, embers
+        public static bool DoF;                  // depth of field (far blur)
 
-        // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads
-        private static readonly (int res, bool dyn, bool light, int bloom, int vig, int grade, bool sharp, bool crt, bool side, int threads)[] Presets =
+        // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads, dev5 fx
+        private static readonly (int res, bool dyn, bool light, int bloom, int vig, int grade, bool sharp, bool crt, bool side, int threads, bool fx)[] Presets =
         {
-            (400, false, false, 0, 0, 0, false, false, false, 1),   // Classic: pixel-identical to v0.2.0
-            (600, true, true, 0, 0, 0, true, false, true, 0),       // Balanced
-            (600, true, true, 1, 15, 1, true, false, true, 0),      // Enhanced (dev4: 600 — r8q could not hold 800 at 120 Hz)
+            (400, false, false, 0, 0, 0, false, false, false, 1, false),   // Classic: pixel-identical to v0.2.0
+            (600, true, true, 0, 0, 0, true, false, true, 0, false),       // Balanced
+            (600, true, true, 1, 15, 1, true, false, true, 0, false),      // Enhanced (dev4: 600 — r8q could not hold 800 at 120 Hz)
+            (600, true, true, 1, 15, 3, true, false, true, 0, true),       // dev5 Masterpiece: Enhanced + world effects + Voxile grade
         };
 
         public static void ApplyPreset(int p)
         {
-            var v = Presets[System.Math.Clamp(p, 0, 2)];
+            var v = Presets[System.Math.Clamp(p, 0, Presets.Length - 1)];
             Resolution = v.res; DynamicRes = v.dyn; SmoothLighting = v.light; Bloom = v.bloom; Vignette = v.vig;
             ColorGrade = v.grade; Sharpen = v.sharp; Crt = v.crt; SideFill = v.side; RenderThreads = v.threads;
+            SkyFx = WaterFx = DynLights = SunRays = AO = Particles = v.fx;
+            Weather = v.fx ? 0 : 3; Fog = v.fx ? 1 : 0; DoF = false;
             GfxPreset = p;
         }
 
-        /// <summary>The preset the current values match, or 3 (Custom).</summary>
+        private static bool FxAll(bool on) =>
+            SkyFx == on && WaterFx == on && DynLights == on && SunRays == on && AO == on && Particles == on &&
+            Weather == (on ? 0 : 3) && Fog == (on ? 1 : 0) && !DoF;
+
+        /// <summary>The preset the current values match, or PresetCustom.</summary>
         public static int MatchPreset()
         {
             for (var p = 0; p < Presets.Length; p++)
@@ -68,10 +86,14 @@ namespace ManagedDoom.UnityPort
                 var v = Presets[p];
                 if (Resolution == v.res && DynamicRes == v.dyn && SmoothLighting == v.light && Bloom == v.bloom &&
                     Vignette == v.vig && ColorGrade == v.grade && Sharpen == v.sharp && Crt == v.crt && SideFill == v.side &&
-                    (p == 0) == (RenderThreads == 1)) return p;
+                    (p == 0) == (RenderThreads == 1) && FxAll(v.fx)) return p;
             }
-            return 3;
+            return PresetCustom;
         }
+
+        /// <summary>dev5: any world effect on (they need smooth lighting for the G-buffer).</summary>
+        public static bool AnyWorldFx =>
+            SmoothLighting && (SkyFx || WaterFx || Weather != 3 || Fog > 0 || DynLights || SunRays || AO || Particles || DoF);
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -82,6 +104,7 @@ namespace ManagedDoom.UnityPort
         };
 
         public static readonly int[] FpsModes = { 0, 60, 90, 120 };
+
 
         public static void Load()
         {
@@ -105,7 +128,6 @@ namespace ManagedDoom.UnityPort
             SmoothLighting = PlayerPrefs.GetInt("gfx_light", 1) == 1;
             Bloom = Mathf.Clamp(PlayerPrefs.GetInt("gfx_bloom", 1), 0, 3);
             Vignette = Mathf.Clamp(PlayerPrefs.GetInt("gfx_vignette", 15), 0, 30);
-            ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 2);
             Sharpen = PlayerPrefs.GetInt("gfx_sharpen", 1) == 1;
             Crt = PlayerPrefs.GetInt("gfx_crt", 0) == 1;
             SideFill = PlayerPrefs.GetInt("gfx_sidefill", 1) == 1;
@@ -115,9 +137,28 @@ namespace ManagedDoom.UnityPort
             Jump = PlayerPrefs.GetInt("jump", 1) == 1;
             StickMode = Mathf.Clamp(PlayerPrefs.GetInt("stick_mode", 0), 0, 1);
             Crosshair = Mathf.Clamp(PlayerPrefs.GetInt("crosshair", 0), 0, CrosshairStyles - 1);
-            // First start of 0.3.0 (new install or update from 0.2.0): pick a preset for the device.
-            if (!PlayerPrefs.HasKey("gfx_preset")) ApplyPreset(SystemInfo.processorCount >= 6 ? 2 : 1);
+            SkyFx = PlayerPrefs.GetInt("fx_sky", 0) == 1;
+            WaterFx = PlayerPrefs.GetInt("fx_water", 0) == 1;
+            Weather = Mathf.Clamp(PlayerPrefs.GetInt("fx_weather", 3), 0, 3);
+            Fog = Mathf.Clamp(PlayerPrefs.GetInt("fx_fog", 0), 0, 2);
+            DynLights = PlayerPrefs.GetInt("fx_lights", 0) == 1;
+            SunRays = PlayerPrefs.GetInt("fx_rays", 0) == 1;
+            AO = PlayerPrefs.GetInt("fx_ao", 0) == 1;
+            Particles = PlayerPrefs.GetInt("fx_particles", 0) == 1;
+            DoF = PlayerPrefs.GetInt("fx_dof", 0) == 1;
+            ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 3);
+            // First start (new install): pick a preset for the device (dev5: Masterpiece on 8-core phones).
+            var fresh = !PlayerPrefs.HasKey("gfx_preset");
+            if (fresh) ApplyPreset(SystemInfo.processorCount >= 8 ? 3 : SystemInfo.processorCount >= 6 ? 2 : 1);
             else GfxPreset = PlayerPrefs.GetInt("gfx_preset", 2);
+            // dev5: preset 3 used to mean Custom; Custom is now 4 (3 = Masterpiece).
+            if (!PlayerPrefs.HasKey("dev5_migrated"))
+            {
+                if (!fresh && GfxPreset == 3) GfxPreset = PresetCustom;
+                // Enhanced (the old default) on 8-core phones moves up to Masterpiece once; Custom is kept.
+                if (!fresh && GfxPreset == 2 && SystemInfo.processorCount >= 8) ApplyPreset(3);
+                PlayerPrefs.SetInt("dev5_migrated", 1);
+            }
             // dev4: Enhanced moved from 800 to 600 lines (device measurement); migrate 0.3.0 Enhanced once.
             if (!PlayerPrefs.HasKey("dev4_migrated"))
             {
@@ -174,6 +215,15 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("jump", Jump ? 1 : 0);
             PlayerPrefs.SetInt("stick_mode", StickMode);
             PlayerPrefs.SetInt("crosshair", Crosshair);
+            PlayerPrefs.SetInt("fx_sky", SkyFx ? 1 : 0);
+            PlayerPrefs.SetInt("fx_water", WaterFx ? 1 : 0);
+            PlayerPrefs.SetInt("fx_weather", Weather);
+            PlayerPrefs.SetInt("fx_fog", Fog);
+            PlayerPrefs.SetInt("fx_lights", DynLights ? 1 : 0);
+            PlayerPrefs.SetInt("fx_rays", SunRays ? 1 : 0);
+            PlayerPrefs.SetInt("fx_ao", AO ? 1 : 0);
+            PlayerPrefs.SetInt("fx_particles", Particles ? 1 : 0);
+            PlayerPrefs.SetInt("fx_dof", DoF ? 1 : 0);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

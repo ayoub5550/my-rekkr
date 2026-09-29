@@ -52,6 +52,17 @@ namespace ManagedDoom.UnityPort
         public int PitchInt => Mathf.Clamp(Mathf.RoundToInt(pitch), -TicCmdExt.MaxPitch, TicCmdExt.MaxPitch);
         public void CenterView() { pitch = 0; }
         private float lastLookTap = -10;
+
+        // dev5 weapon wheel: long-press WEAPON opens a radial wheel of owned weapons; slide + release selects.
+        public bool WheelOpen { get; private set; }
+        public int WheelSel { get; private set; } = -1;
+        public readonly List<WeaponType> WheelItems = new List<WeaponType>();
+        public readonly List<bool> WheelUsable = new List<bool>();
+        private int wheelFinger = -1;
+        private float wheelPress;
+        private int wheelDir;
+        private Vector2 wheelStart;
+        public const float WheelHold = 0.25F;
         private float stickReturn;     // knob ease back to the centre after release (s)
         private Vector2 stickReleaseKnob;
         public float AutoPitch;        // autopilot: pitch units per second
@@ -253,6 +264,12 @@ namespace ManagedDoom.UnityPort
 
             foreach (var kv in owner) if (buttons.TryGetValue(kv.Value, out var hb) && !EditMode) hb.Held = true;
 
+            if (wheelFinger >= 0 && !WheelOpen && owner.ContainsKey(wheelFinger) && Time.unscaledTime - wheelPress >= WheelHold)
+            {
+                BuildWheel();
+                if (WheelItems.Count >= 2) { WheelOpen = true; WheelSel = -1; Haptics.Pulse(10, 80); }
+            }
+
             // Gyro aim: angular velocity around the world "up" axis (from gravity), so it works in
             // either landscape orientation and however the phone is tilted.
             if (RekkrSettings.Gyro && !EditMode && !settingsOpen && !MenuMode && !TitleMode && SystemInfo.supportsGyroscope)
@@ -314,6 +331,31 @@ namespace ManagedDoom.UnityPort
                     // dev4: the base never follows the finger any more (fixed at home, or where the
                     // finger first landed in floating mode); the knob is clamped to the rim.
                     StickKnob = StickCenter + Vector2.ClampMagnitude(p - StickCenter, StickRadius);
+                }
+                else if ((ctl == Ctl.WeaponNext || ctl == Ctl.WeaponPrev) && id == wheelFinger && WheelOpen)
+                {
+                    var v = p - wheelStart;
+                    var n = WheelItems.Count;
+                    if (v.magnitude > Screen.height * 0.04F && n > 0)
+                    {
+                        var ang = Mathf.Atan2(v.x, -v.y);                     // 0 = up, clockwise
+                        if (ang < 0) ang += Mathf.PI * 2;
+                        var sel = Mathf.RoundToInt(ang / (Mathf.PI * 2 / n)) % n;
+                        if (sel != WheelSel) { WheelSel = sel; Haptics.Pulse(6, 50); }
+                    }
+                    else WheelSel = -1;
+                }
+                else if (ctl == Ctl.Look && app.AutomapOpen)
+                {
+                    // dev5 automap: drag pans, two fingers pinch-zoom.
+                    var other = -1;
+                    foreach (var kv in owner) if (kv.Key != id && kv.Value == Ctl.Look) { other = kv.Key; break; }
+                    if (other >= 0 && lastPos.TryGetValue(other, out var op))
+                    {
+                        var d0 = (last - op).magnitude; var d1 = (p - op).magnitude;
+                        if (d0 > 10) app.AutomapZoom(d1 / d0);
+                    }
+                    else app.AutomapPan(p - last);
                 }
                 else if (ctl == Ctl.Look || ctl == Ctl.Fire || ctl == Ctl.Jump)
                 {
@@ -377,13 +419,18 @@ namespace ManagedDoom.UnityPort
                     break;
                 case Ctl.Look:
                     // Double-tap the look area: centre the view vertically.
-                    if (Time.unscaledTime - lastLookTap < 0.3F && RekkrSettings.FreeLook) { pitch = 0; lastLookTap = -10; }
+                    if (Time.unscaledTime - lastLookTap < 0.3F && app.AutomapOpen) { app.AutomapFollow(); lastLookTap = -10; }
+                    else if (Time.unscaledTime - lastLookTap < 0.3F && RekkrSettings.FreeLook) { pitch = 0; lastLookTap = -10; }
                     else lastLookTap = Time.unscaledTime;
                     break;
                 case Ctl.Jump: Flash(ctl); break;
                 case Ctl.MenuTap: app.MenuTapAt(p, true); break;
-                case Ctl.WeaponNext: weaponRequest = NextWeapon(+1); Flash(ctl); break;
-                case Ctl.WeaponPrev: weaponRequest = NextWeapon(-1); Flash(ctl); break;
+                case Ctl.WeaponNext:
+                case Ctl.WeaponPrev:
+                    // dev5: short tap = next/prev on release; hold = weapon wheel.
+                    wheelFinger = finger; wheelPress = Time.unscaledTime; wheelDir = ctl == Ctl.WeaponNext ? 1 : -1; wheelStart = p;
+                    Flash(ctl);
+                    break;
                 case Ctl.Run: runToggle = !runToggle; config.game_alwaysrun = runToggle; Flash(ctl); break;
                 case Ctl.Settings: app.ToggleSettings(); Flash(ctl); break;
                 case Ctl.QuickSave: app.QuickSave(); Flash(ctl); break;
@@ -424,6 +471,15 @@ namespace ManagedDoom.UnityPort
                     StickCenter = StickHome;
                 }
                 if (ctl == repeatCtl) repeatCtl = Ctl.None;
+                if ((ctl == Ctl.WeaponNext || ctl == Ctl.WeaponPrev) && finger == wheelFinger)
+                {
+                    if (WheelOpen)
+                    {
+                        if (WheelSel >= 0 && WheelSel < WheelItems.Count && WheelUsable[WheelSel]) { weaponRequest = (int)WheelItems[WheelSel]; Haptics.Pulse(12, 110); }
+                    }
+                    else weaponRequest = NextWeapon(wheelDir);
+                    WheelOpen = false; WheelSel = -1; wheelFinger = -1;
+                }
             }
             owner.Remove(finger);
             lastPos.Remove(finger);
@@ -432,7 +488,37 @@ namespace ManagedDoom.UnityPort
         private void Flash(Ctl c) { if (buttons.TryGetValue(c, out var b)) b.PressFlash = 0.18F; }
 
         /// <summary>Autopilot / tests: press a control exactly like a tap.</summary>
-        public void Tap(Ctl c) { OnPress(c, -100 - (int)c, buttons.ContainsKey(c) ? buttons[c].Center : Vector2.zero); owner.Remove(-100 - (int)c); if (c == repeatCtl) repeatCtl = Ctl.None; }
+        public void Tap(Ctl c)
+        {
+            if (c == Ctl.WeaponNext || c == Ctl.WeaponPrev) { weaponRequest = NextWeapon(c == Ctl.WeaponNext ? 1 : -1); Flash(c); return; }
+            OnPress(c, -100 - (int)c, buttons.ContainsKey(c) ? buttons[c].Center : Vector2.zero); owner.Remove(-100 - (int)c); if (c == repeatCtl) repeatCtl = Ctl.None;
+        }
+
+        /// <summary>Tests: open the weapon wheel and point at item <paramref name="sel"/> (-1 = none) / close it.</summary>
+        public void TestWheel(bool open, int sel)
+        {
+            if (open) { BuildWheel(); WheelOpen = WheelItems.Count >= 2; WheelSel = sel; }
+            else
+            {
+                if (WheelOpen && WheelSel >= 0 && WheelSel < WheelItems.Count && WheelUsable[WheelSel]) weaponRequest = (int)WheelItems[WheelSel];
+                WheelOpen = false; WheelSel = -1;
+            }
+        }
+
+        private void BuildWheel()
+        {
+            WheelItems.Clear(); WheelUsable.Clear();
+            var game = app.Doom?.Game;
+            if (game?.World == null) return;
+            var pl = game.World.ConsolePlayer;
+            foreach (var w in cycle)
+            {
+                if (!pl.WeaponOwned[(int)w]) continue;
+                var ammo = DoomInfo.WeaponInfos[(int)w].Ammo;
+                WheelItems.Add(w);
+                WheelUsable.Add(ammo == AmmoType.NoAmmo || pl.Ammo[(int)ammo] > 0);
+            }
+        }
 
         public bool AutoFire;
         public bool AutoUse;

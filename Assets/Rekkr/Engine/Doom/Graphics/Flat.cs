@@ -40,6 +40,9 @@ namespace ManagedDoom
             return name;
         }
 
+        /// <summary>my-rekkr dev5: G-buffer liquid class (see Video.GBuffer), set at load.</summary>
+        public byte GClass;
+
         public string Name => name;
         public byte[] Data => data;
     }

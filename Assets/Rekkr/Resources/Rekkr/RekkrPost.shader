@@ -16,7 +16,7 @@ Shader "Rekkr/Post"
     sampler2D _MainTex; float4 _MainTex_TexelSize;
     sampler2D _BloomTex;
     sampler2D _BlurTex;
-    half _Threshold, _Knee, _Bloom, _Vignette, _Contrast, _Saturation, _Warmth, _Sharpen, _Crt, _Scan;
+    half _Threshold, _Knee, _Bloom, _Vignette, _Contrast, _Saturation, _Warmth, _Sharpen, _Crt, _Scan, _Filmic;
     float4 _Content;   // x0, width (uv) of the centred 4:3 image; width 0 = no side-fill
     float4 _ScreenPx;  // game rect size in physical pixels (xy)
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -112,6 +112,15 @@ Shader "Rekkr/Post"
                 half l = dot(c, half3(0.299h, 0.587h, 0.114h));
                 c = lerp(half3(l, l, l), c, _Saturation);
                 c *= half3(1 + _Warmth, 1, 1 - _Warmth);
+                // dev5 "Voxile" filmic grade: exposure + ACES-fitted curve, warm highlights, cool shadows.
+                if (_Filmic > 0)
+                {
+                    float3 x = max(c, 0) * 1.25;
+                    float3 f = saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
+                    half lum = dot(f, half3(0.299h, 0.587h, 0.114h));
+                    f += (half3(0.05h, 0.02h, -0.03h) * smoothstep(0.45h, 1.0h, lum) + half3(-0.02h, 0.0h, 0.035h) * (1 - smoothstep(0.0h, 0.4h, lum)));
+                    c = f;
+                }
                 // CRT: scanlines at physical pixel pitch + soft aperture mask.
                 if (_Crt > 0)
                 {

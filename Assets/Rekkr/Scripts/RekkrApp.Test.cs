@@ -55,6 +55,7 @@ public sealed partial class RekkrApp
         if (testScenario == 2) yield return Scenario2();
         else if (testScenario == 3) yield return Scenario3();
         else if (testScenario == 4) yield return Scenario4();
+        else if (testScenario == 5) yield return Scenario5();
         else yield return Scenario1();
         FinishTestLoop();
     }
@@ -73,6 +74,8 @@ public sealed partial class RekkrApp
         settingsTab = 2; yield return Wait(1.6F); Shot("05_settings_display"); yield return null;
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("05b_settings_graphics"); yield return null;
         gfxPage = 1; yield return Wait(1.4F); Shot("05c_settings_effects"); yield return null;
+        gfxPage = 2; yield return Wait(1.4F); Shot("05d_settings_world"); yield return null;
+        gfxPage = 3; yield return Wait(1.4F); Shot("05e_settings_world2"); yield return null;
         gfxPage = 0;
         settingsTab = 0; yield return Wait(0.6F);
         OpenEditor(); yield return Wait(1.4F); Shot("06_editor"); yield return null;
@@ -148,6 +151,7 @@ public sealed partial class RekkrApp
         settingsTab = 2; yield return Wait(1.5F); Shot("04_settings_ar_display"); yield return null;
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("04b_settings_ar_graphics"); yield return null;
         gfxPage = 1; yield return Wait(1.4F); Shot("04c_settings_ar_effects"); yield return null;
+        gfxPage = 2; yield return Wait(1.4F); Shot("04d_settings_ar_world"); yield return null;
         gfxPage = 0;
         settingsTab = 0; settingsOpen = false;
         yield return TapSeq(Ctl.Back, 0.8F);
@@ -214,6 +218,70 @@ public sealed partial class RekkrApp
             }
         }
         ApplyPreset(2);
+    }
+
+    // ------------------------------------------------------------ dev5 scenario 5: Masterpiece tour
+    // Masterpiece preset on each episode's first map (sky, water, weather, lights, particles), forced
+    // rain/snow, weapon wheel, automap touch, and an Enhanced vs Masterpiece fps comparison.
+    private IEnumerator Scenario5()
+    {
+        HudMode = 1;
+        yield return Wait(4F);
+        yield return TapSeq(Ctl.Ok, 1.0F);
+        yield return TapSeq(Ctl.Back, 0.8F);
+        ApplyPreset(3);
+        Log($"preset={RekkrSettings.GfxPreset} worldfx={WorldFx.Active}");
+        for (var ep = 1; ep <= 4; ep++)
+        {
+            Doom.NewGame(GameSkill.Easy, ep, 1);
+            yield return Wait(1.5F);
+            var ft = new List<float>(6000);
+            var evs = new (float, Action, string)[] { (5F, null, $"mp_e{ep}_a"), (12F, () => input.AutoPitch = 30F, null), (13.2F, () => input.AutoPitch = 0, $"mp_e{ep}_up"), (14F, () => input.CenterView(), null), (20F, null, $"mp_e{ep}_b") };
+            var play = Play(26F, evs);
+            while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
+            float sum = 0; foreach (var f in ft) sum += f;
+            Log($"masterpiece E{ep}M1 avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} lines={video.Lines} lights={worldFx?.LightsLastFrame} particles={worldFx?.ParticlesLastFrame} outdoor={ManagedDoom.Video.ThreeDRenderer.LastView.SkyCeiling}");
+        }
+        // Forced weather on E1M1 (outdoors at the start).
+        Doom.NewGame(GameSkill.Easy, 1, 1);
+        yield return Wait(1.5F);
+        RekkrSettings.Weather = 1;
+        yield return Play(7F, new (float, Action, string)[] { (5F, null, "mp_rain") });
+        RekkrSettings.Weather = 2;
+        yield return Play(7F, new (float, Action, string)[] { (5F, null, "mp_snow") });
+        RekkrSettings.Weather = 0;
+        // Weapon wheel (test only: give the weapons).
+        var pl = Doom.Game.World.ConsolePlayer;
+        for (var i = 0; i < pl.WeaponOwned.Length; i++) pl.WeaponOwned[i] = true;
+        for (var i = 0; i < pl.Ammo.Length; i++) pl.Ammo[i] = pl.MaxAmmo[i];
+        input.TestWheel(true, 3); yield return Wait(0.8F); Shot("wheel_open"); yield return null;
+        var want = input.WheelItems.Count > 3 ? input.WheelItems[3] : WeaponType.NoChange;
+        input.TestWheel(false, -1);
+        yield return Play(2.5F, null);
+        Log($"wheel items={input.WheelItems.Count} wanted={want} ready={pl.ReadyWeapon} pending={pl.PendingWeapon}");
+        // Automap touch: zoom in, pan, follow.
+        input.Tap(Ctl.Map); yield return Wait(0.6F);
+        var z0 = Doom.Game.World.AutoMap.Zoom.ToFloat();
+        for (var i = 0; i < 6; i++) { AutomapZoom(1.2F); yield return null; }
+        AutomapPan(new Vector2(-Screen.width * 0.2F, 0)); yield return Wait(0.6F); Shot("automap_touch"); yield return null;
+        Log($"automap zoom {z0:F2}->{Doom.Game.World.AutoMap.Zoom.ToFloat():F2} follow={Doom.Game.World.AutoMap.Follow}");
+        AutomapFollow(); yield return Wait(0.3F);
+        Log($"automap follow={Doom.Game.World.AutoMap.Follow}");
+        input.Tap(Ctl.Map); yield return Wait(0.5F);
+        // Enhanced vs Masterpiece on E1M1.
+        foreach (var preset in new[] { 2, 3 })
+        {
+            Doom.NewGame(GameSkill.Easy, 1, 1);
+            ApplyPreset(preset);
+            yield return Play(2F, null);
+            var ft = new List<float>(4000);
+            var play = Play(15F, null);
+            while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
+            float sum = 0; foreach (var f in ft) sum += f;
+            ft.Sort();
+            Log($"compare preset={preset} avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} lines={video.Lines}");
+        }
+        HudMode = 0;
     }
 
     // ------------------------------------------------------------ dev3 scenario 4: long soak

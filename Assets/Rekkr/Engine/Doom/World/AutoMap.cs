@@ -323,6 +323,22 @@ namespace ManagedDoom
             }
         }
 
+        // my-rekkr dev5: touch control of the automap (visual only).
+        public void TouchPan(float dxUnits, float dyUnits)
+        {
+            follow = false;
+            viewX = Fixed.FromFloat(Math.Clamp(viewX.ToFloat() + dxUnits, minX.ToFloat(), maxX.ToFloat()));
+            viewY = Fixed.FromFloat(Math.Clamp(viewY.ToFloat() + dyUnits, minY.ToFloat(), maxY.ToFloat()));
+        }
+
+        public void TouchZoom(float factor)
+        {
+            var z = Math.Clamp(zoom.ToFloat() * factor, 0.5F, 32F);
+            zoom = Fixed.FromFloat(z);
+        }
+
+        public void SetFollow(bool on) { follow = on; }
+
         public Fixed MinX => minX;
         public Fixed MaxX => maxX;
         public Fixed MinY => minY;

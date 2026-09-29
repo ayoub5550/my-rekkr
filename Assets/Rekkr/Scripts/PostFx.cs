@@ -25,7 +25,7 @@ namespace ManagedDoom.UnityPort
 
         public static bool Active =>
             RekkrSettings.Bloom > 0 || RekkrSettings.Vignette > 0 || RekkrSettings.ColorGrade > 0 ||
-            RekkrSettings.Sharpen || RekkrSettings.Crt || RekkrSettings.SideFill;
+            RekkrSettings.Sharpen || RekkrSettings.Crt || RekkrSettings.SideFill || WorldFx.Active;
 
         private static RenderTexture Make(int width, int height)
         {
@@ -54,10 +54,10 @@ namespace ManagedDoom.UnityPort
         }
 
         /// <summary>Runs the chain for this frame. Call once per frame before OnGUI draws.</summary>
-        public void Process(UnityVideo video, Rect gameRect)
+        public void Process(UnityVideo video, Rect gameRect, UnityEngine.Texture source = null)
         {
             Ensure(Mathf.RoundToInt(gameRect.width), Mathf.RoundToInt(gameRect.height));
-            Graphics.Blit(video.Texture, scene, screen);
+            Graphics.Blit(source != null ? source : (UnityEngine.Texture)video.Texture, scene, screen);   // dev5: source = WorldFx output
 
             var bloomOn = RekkrSettings.Bloom > 0;
             if (bloomOn)
@@ -79,10 +79,11 @@ namespace ManagedDoom.UnityPort
             post.SetTexture("_BlurTex", side ? (UnityEngine.Texture)blur[blur.Length - 1] : Texture2D.blackTexture);
             post.SetFloat("_Bloom", BloomLevels[Mathf.Clamp(RekkrSettings.Bloom, 0, 3)]);
             post.SetFloat("_Vignette", RekkrSettings.Vignette / 100F);
-            var grade = RekkrSettings.ColorGrade;   // 0 neutral, 1 vivid, 2 warm
-            post.SetFloat("_Contrast", grade == 0 ? 1F : 1.08F);
-            post.SetFloat("_Saturation", grade == 0 ? 1F : grade == 1 ? 1.15F : 1.05F);
+            var grade = RekkrSettings.ColorGrade;   // 0 neutral, 1 vivid, 2 warm, 3 Voxile (dev5 filmic)
+            post.SetFloat("_Contrast", grade == 0 ? 1F : grade == 3 ? 1.04F : 1.08F);
+            post.SetFloat("_Saturation", grade == 0 ? 1F : grade == 1 ? 1.15F : grade == 3 ? 1.12F : 1.05F);
             post.SetFloat("_Warmth", grade == 2 ? 0.05F : 0F);
+            post.SetFloat("_Filmic", grade == 3 ? 1F : 0F);
             // Sharpen only helps when the frame is upscaled (fewer frame lines than screen lines).
             post.SetFloat("_Sharpen", RekkrSettings.Sharpen && video.FrameHeight < gameRect.height * 0.95F ? 1F : 0F);
             post.SetFloat("_Crt", RekkrSettings.Crt ? 1F : 0F);

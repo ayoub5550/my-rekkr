@@ -136,6 +136,7 @@ namespace ManagedDoom.Video
 
         /// <summary>my-rekkr test hook: the palette-index frame (column-major x*height+y) for HOM scans.</summary>
         public byte[] ScreenDataForTest => screen.Data;
+        public byte[] GDataForTest => screen.GData;
 
         public void RenderDoom(Doom doom, Fixed frameFrac)
         {
@@ -243,6 +244,7 @@ namespace ManagedDoom.Video
                     {
                         screen.TexData = new byte[screen.Data.Length];
                         screen.LightData = new ushort[screen.Data.Length];
+                        screen.GData = new byte[screen.Data.Length];
                     }
                     trueColorFrame = ThreeDRenderer.TrueColor;
                     ThreeDRenderer.ViewPitch = displayPlayer == consolePlayer ? LocalViewPitch : 0;
@@ -414,7 +416,8 @@ namespace ManagedDoom.Video
             var h = screen.Height; var w = screen.Width;
             var (wx, wy, ww, wh) = writeWindow;
             var x0 = w * k / WriteChunks; var x1 = w * (k + 1) / WriteChunks;
-            fixed (byte* sd = screenData, tex = screen.TexData, band = bandFlat)
+            fixed (byte* sd = screenData, tex = screen.TexData, band = bandFlat, gd = screen.GData)
+            fixed (bool* vp = validPair)
             fixed (ushort* light = screen.LightData)
             fixed (uint* lit = litFlat, pal = colors)
             {
@@ -434,10 +437,15 @@ namespace ManagedDoom.Video
                         var l = light[i];
                         var idx = (l >> 8 << 8) | tex[i];          // row * 256 + texel
                         var f = (uint)(l & 255);
-                        if (band[idx] != s || f == 0 || idx >= bandLimit) { p[i] = pal[s]; continue; }
+                        // dev5: alpha = G-buffer code of the 3D pixel; 255 when 2D overdrew it (its palette
+                        // index is not any COLORMAP row of the pixel's texel).
+                        var gcode = gd[i];
+                        if (gcode == 255 || !vp[(tex[i] << 8) | s]) { p[i] = pal[s]; continue; }
+                        var alpha = (uint)gcode << 24;
+                        if (band[idx] != s || f == 0 || idx >= bandLimit) { p[i] = (pal[s] & 0xFFFFFFu) | alpha; continue; }
                         var a = lit[idx]; var b = lit[idx + 256];
                         var fa = 256u - f;
-                        p[i] = 0xFF000000u
+                        p[i] = alpha
                             | ((((a & 0xFF00FFu) * fa + (b & 0xFF00FFu) * f) >> 8) & 0xFF00FFu)
                             | ((((a & 0xFF00u) * fa + (b & 0xFF00u) * f) >> 8) & 0xFF00u);
                     }
@@ -453,8 +461,16 @@ namespace ManagedDoom.Video
         private uint[] litPalette;
         private int bandLimit;
 
+        private bool[] validPair;   // dev5: [texel*256 + palette index] = some COLORMAP row maps texel → index
+
         private void PrepareTrueColorTables(uint[] colors)
         {
+            if (validPair == null)
+            {
+                validPair = new bool[65536];
+                foreach (var row in colorMapRows)
+                    for (var t = 0; t < 256; t++) validPair[(t << 8) | row[t]] = true;
+            }
             if (bandFlat == null)
             {
                 var rowsUsed = Math.Min(32, colorMapRows.Length);
