@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.4.0";
+    public const string Version = "0.5.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
