@@ -92,7 +92,13 @@ GPU chain (`Scripts/WorldFx.cs` + `Resources/Rekkr/RekkrWorld.shader`), all in *
 | 6 | Dynamic lights (fullbright things, muzzle flash) | ✅ 2026-09-29 | ≤ 8 nearest fullbright mobjs within 1500 u (colour = bright-pixel average of the sprite, cached), muzzle flash from `ExtraLight`. Linux E3M1: 6 lights |
 | 7 | Particles (sparks, blood, splashes, embers) | ✅ 2026-09-29 | ≤ 512, puffs → 8 sparks, blood → 6 drops, splashes when walking in water/murky, embers from hot floors near the player; GL quads depth-tested against the G-buffer (pass 4) |
 | 8 | Voxile look: AO, filmic grade, DoF, Masterpiece preset, GRAPHICS tab page 2 | ✅ 2026-09-29 | AO 8 taps (strength 0.55), grade 3 "VOXILE (FILMIC)" (ACES fit + split tone), DoF (off by default). Presets: 3 = Masterpiece, Custom moved to 4 (`dev5_migrated`); Enhanced users on ≥ 8-core phones move to Masterpiece once; new installs: ≥ 8 cores → Masterpiece. GRAPHICS pages 3–4 (world effects). Test scenario 5 = Masterpiece tour |
-| 9 | Build 0.5.0, QA, Test Lab (r8q + a weaker device), video, release (byte-verified), report | ⬜ | |
+| 9 | Build 0.5.0, QA, Test Lab (r8q + a weaker device), video, release (byte-verified), report | ✅ 2026-09-29 (weak device ⏭) | APK 100,040,073 B, versionCode 5, same cert. Test Lab r8q/33 scenarios 1+2+5: **Passed**, 0 ` E Unity`, 0 FATAL. S5 Masterpiece: E1M1 104.7 / E2M1 100.2 / E3M1 108.9 / E4M1 104.4 fps (dynres 400 lines); compare Enhanced 108.2 vs Masterpiece 102.7 fps, p99 17.0 ms both → gates (≥ 90 / ≥ 105) met. S1 100.8 fps p99 25.4 ms (now on Masterpiece; dev4 was 109.2 on Enhanced). S2 Arabic E1–E4 105.1 fps. Wheel → Shotgun, automap zoom 1.00→2.99 + follow OK. Video frames reviewed (washed-out frames = autopilot pressed against walls / pain flash, not bugs). Release v0.5.0 byte-verified. **Weak device (a15/34) not run: TEST_QUOTA_EXCEEDED** — see Open items |
+
+### Open items after v0.5.0 (do these first in «أكمل dev5» or at the start of dev6)
+
+1. Run `OUT=Artifacts/ftl-dev5-a15 SCENARIOS=5 sh tools/sandbox/ftl_gameloop.sh Builds/REKKR-0.5.0.apk a15 34` (Galaxy A15, Helio G99 / Mali-G57 MC2). Gate: ≥ 55 fps on its auto preset.
+2. The auto-Masterpiece rule is only `cores ≥ 8`. Many weak-GPU phones have 8 cores. If the A15 misses the gate, also require a GPU class (Adreno ≥ 640, Mali-G7x/G710+/Immortalis, Xclipse) and give other phones Enhanced.
+3. S1 p99 rose to 25.4 ms (spikes during saves or menu changes on Masterpiece). Profile it together with the IL2CPP gen0 GCs (~210 per run).
 
 Legend: ⬜ not started · 🚧 in progress (see Next:) · ✅ done · ⏭ deferred (reason).
 

@@ -1,7 +1,14 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-29 (v0.4.0, dev4).
+Last updated: 2026-09-29 (v0.5.0, dev5).
 
+> **dev5 (v0.5.0) was released 2026-09-29 from branch `feat/dev5`** (GitHub release v0.5.0): the G-buffer in the frame
+> alpha feeds GPU effects: living sky and sun rays, reflective water, hot liquids, fog, weather and lightning, dynamic
+> lights, particles, AO, the Voxile grade and the Masterpiece preset; plus the weapon wheel and automap touch. Plan and
+> measurements: [`docs/DEV5.md`](docs/DEV5.md), including open items (weak-device test). **Next = dev6** (GPU 3D
+> "Remaster" renderer + voxel/extruded things), fully specified in [`docs/DEV6.md`](docs/DEV6.md). When the owner says
+> «نفذ dev6» or «أكمل dev6», follow its status table. No feat branch is merged into main: ask the owner first.
+>
 > **dev4 (v0.4.0) was released 2026-09-29 from branch `feat/dev4`** (GitHub release v0.4.0): free look, jump,
 > fixed joystick, crosshair, carved-stone UI with the WAD pixel font. Plan, specs, measurements and what is deferred
 > to dev5 are in [`docs/DEV4.md`](docs/DEV4.md). dev3 history: [`docs/DEV3.md`](docs/DEV3.md). If the owner says
@@ -50,6 +57,10 @@ v0.1.0 checkpoint:
   (dead zone + curve, floating option), `+` crosshair, carved-stone skin + WAD STCFN pixel font, direct menu taps, Enhanced
   = 600 lines. APK 99,836,563 B, versionCode 4. Test Lab r8q/33 scenarios 1+2: Passed, 0 `E Unity`, S1 avg 109.2 fps
   p99 17.0 ms, S2 (Arabic) E1–E4 load, avg 95.2 fps. Details: `docs/DEV4.md`.
+- v0.5.0 (dev5), branch `feat/dev5`: G-buffer (depth/material in the frame alpha, `GBuffer.cs`) → `WorldFx` + `RekkrWorld.shader`
+  (sky/clouds/rays, water reflections, hot liquids, fog, rain/snow/embers/dust, lightning, ≤ 8 dynamic lights, ≤ 512 particles,
+  AO, DoF), Voxile filmic grade, Masterpiece preset (3; Custom = 4), weapon wheel, automap touch. APK 100,040,073 B, versionCode 5.
+  Test Lab r8q/33 S1+S2+S5 Passed, 0 `E Unity`; Masterpiece E1–E4 100.2–108.9 fps. Weak device not tested (quota). Details: `docs/DEV5.md`.
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
@@ -150,6 +161,8 @@ dev2 did the soundfont, widescreen, button editor, haptics and quick save.
   - Controller button remapping UI.
   - Cloud or exported saves.
   - A human playtest on a POCO F3, including gyro direction (yaw and the new pitch) and audio.
-  - dev5 candidates: automap touch pan/zoom, weapon wheel, fewer gen0 GCs on IL2CPP.
-- Test scenarios: `REKKR_SCENARIO=1` (play + saves + haptics), `2` (Continue + E1–E4 + Arabic).
+  - Fewer gen0 GCs on IL2CPP. Run the weak-device test and add a GPU-class rule for auto-Masterpiece (DEV5 open items).
+  - dev6: the GPU 3D renderer and voxel things (`docs/DEV6.md`).
+- Test scenarios: `REKKR_SCENARIO=1` (play + saves + haptics), `2` (Continue + E1–E4 + Arabic), `5` (Masterpiece tour,
+  weather, wheel, automap, Enhanced vs Masterpiece). dev5 runs used `SCENARIOS=1,2,5 FTL_TIMEOUT=15m`.
   `ftl_gameloop.sh` runs both by default (`SCENARIOS=1,2`, `FTL_TIMEOUT=12m`).

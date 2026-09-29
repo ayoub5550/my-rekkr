@@ -168,7 +168,7 @@ New files (suggested):
 
 | # | Stage | Status | Acceptance (must be true before ✅) |
 |---|---|---|---|
-| 0 | Branch, version 0.6.0/6, settings `Renderer: Software/Remaster` (hidden until stage 4) | ⬜ | builds; nothing changes visually |
+| 0 | Branch (from `feat/dev5`), version 0.6.0/6, settings `Renderer: Software/Remaster` (hidden until stage 4). First do the DEV5 "Open items after v0.5.0": the weak-device Test Lab run and the GPU-class rule for auto-Masterpiece | ⬜ | builds; nothing changes visually |
 | 1 | Camera parity: GPU camera that matches the software view (position, angle, pitch, FOV, 1.2 aspect) | ⬜ | overlay test on E1M1 at 8 angles × 3 pitches: wall edges within 1 px at 400 lines |
 | 2 | Static level mesh: walls (pegging, offsets, masked mids, sky hack), flats (tessellated), textures (atlas/array), faithful Doom lighting shader | ⬜ | all 36 maps build without exceptions; per-map screenshot diff vs software (HOM-free, no missing flats); triangle count logged |
 | 3 | Dynamic sectors (doors, lifts, crushers, light changes), animated textures/flats, scrolling walls, switches | ⬜ | E1M1 door + lift video; DEMO1 played back with the Remaster view looks right end-to-end |
