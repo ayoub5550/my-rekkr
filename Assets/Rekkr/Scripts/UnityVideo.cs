@@ -11,23 +11,46 @@ namespace ManagedDoom.UnityPort
 {
     public sealed class UnityVideo : IVideo, IDisposable
     {
-        private readonly Renderer renderer;
-        private readonly byte[] frame;
+        private readonly Config config;
+        private readonly GameContent content;
+        private Renderer renderer;
+        private byte[] frame;
         private Texture2D texture;
+        private int wideWidth;
 
-        public UnityVideo(Config config, GameContent content)
+        public UnityVideo(Config config, GameContent content, int wideWidth = 0)
         {
-            renderer = new Renderer(config, content);
+            this.config = config;
+            this.content = content;
+            Create(wideWidth);
+        }
+
+        private void Create(int wide)
+        {
+            wideWidth = wide;
+            renderer = new Renderer(config, content, wide);
             frame = new byte[4 * renderer.Width * renderer.Height];
+            if (texture != null) UnityEngine.Object.Destroy(texture);
             texture = new Texture2D(renderer.Height, renderer.Width, TextureFormat.RGBA32, false, false);
             texture.filterMode = FilterMode.Bilinear;
             texture.wrapMode = TextureWrapMode.Clamp;
             texture.name = "DoomFrame";
         }
 
+        /// <summary>Change the frame width (widescreen on/off, rotation). Returns true if it changed.</summary>
+        public bool SetWideWidth(int wide)
+        {
+            var target = System.Math.Max(640, wide & ~1);
+            if (target == renderer.Width) return false;
+            Create(wide);
+            return true;
+        }
+
         public Texture2D Texture => texture;
         public int FrameWidth => renderer.Width;
         public int FrameHeight => renderer.Height;
+        public int CenterOffset => renderer.CenterOffset;
+        public int Scale => renderer.Scale;
         public byte[] FrameData => frame;
 
         public void Render(Doom doom, Fixed frameFrac)

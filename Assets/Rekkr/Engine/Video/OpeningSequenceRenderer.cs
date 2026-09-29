@@ -36,7 +36,7 @@ namespace ManagedDoom.Video
 
         public void Render(OpeningSequence sequence, Fixed frameFrac)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
 
             switch (sequence.State)
             {

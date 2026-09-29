@@ -36,6 +36,13 @@ therefore distributed under GPL-2.0 (`LICENSE`).
 `Assets/StreamingAssets/TimGM6mb.sf2`, General MIDI soundfont by Tim Brechbill, as shipped with
 Managed Doom (`ThirdParty/licenses/LICENSE_TimGM6mb.txt`).
 
+## GeneralUser GS 2.0.3 — GeneralUser GS License v2.0
+
+`Assets/StreamingAssets/GeneralUser-GS.sf2` — General MIDI/GS SoundFont by S. Christian Collins,
+<https://www.schristiancollins.com/generaluser>, from <https://github.com/mrbumpy409/GeneralUser-GS>
+(md5 `bfe69fe5b2702ef7c12c44bd0d34f8f1`). Free to use and redistribute in software
+(`ThirdParty/licenses/LICENSE_GeneralUserGS.txt`). Used for the "HIGH" music quality setting.
+
 ## Freedoom — BSD-3-Clause
 
 `Assets/StreamingAssets/rekkr-compat.wad` contains only the patches `WALL54_1` and `W65B_1`
@@ -45,6 +52,9 @@ taken from Freedoom 0.13.0 `freedoom1.wad`, <https://freedoom.github.io/>
 ## Fonts and icons
 
 * Lato (Łukasz Dziedzic) — SIL Open Font License 1.1. Used for touch-UI labels.
+* Noto Sans Bold + Noto Sans Arabic Bold (Google) — SIL Open Font License 1.1. Merged and
+  subset into `RekkrArabic.ttf` (renamed "RekkrUI Arabic") by `tools/make_arabic_font.py` for
+  the Arabic settings screen; Noto Sans Arabic also renders the Arabic button labels.
 * Material Design Icons (Pictogrammers / Google) — SIL OFL 1.1 font, icons Apache-2.0/CC BY.
   Rasterised into the button textures by `tools/make_ui_textures.py`.
 * Launcher icon: built from REKKR's own status-bar face sprite (`tools/make_icon.py`), CC BY-NC 4.0.

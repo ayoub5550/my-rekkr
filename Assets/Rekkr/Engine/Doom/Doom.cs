@@ -550,6 +550,15 @@ namespace ManagedDoom
         public DoomGame Game => game;
         public DoomMenu Menu => menu;
         public WipeEffect WipeEffect => wipeEffect;
+
+        /// <summary>my-rekkr: recreate the wipe after the video frame size changed (widescreen toggle).</summary>
+        public void ResetWipe()
+        {
+            if (!wiping)
+            {
+                wipeEffect = new WipeEffect(video.WipeBandCount, video.WipeHeight);
+            }
+        }
         public bool Wiping => wiping;
         public string QuitMessage => quitMessage;
     }

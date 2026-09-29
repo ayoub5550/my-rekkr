@@ -7,6 +7,7 @@ import math, os
 OUT = os.path.join(os.path.dirname(__file__), "..", "Assets/Rekkr/Resources/Rekkr/UI")
 MDI = "/usr/share/fonts/truetype/materialdesignicons-webfont/materialdesignicons-webfont.ttf"
 LATO = "/usr/share/fonts/truetype/lato/Lato-Black.ttf"
+ARABIC = "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf"  # SIL OFL 1.1; shaped with libraqm
 S = 256; K = 4; N = S * K
 GOLD = (222, 178, 92); GOLD_HI = (255, 222, 140); DARK = (18, 13, 9)
 
@@ -29,7 +30,7 @@ def disc(pressed=False):
               outline=(255, 235, 190, 60), width=2 * K)
     return down(img)
 
-def glyph(cp, label=None, size=0.52):
+def glyph(cp, label=None, size=0.52, arabic=False):
     img = Image.new("RGBA", (N, N), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     f = ImageFont.truetype(MDI, int(N * (size if not label else size * 0.86)))
@@ -41,15 +42,19 @@ def glyph(cp, label=None, size=0.52):
     shadow = Image.new("RGBA", (N, N), (0, 0, 0, 0)); ds = ImageDraw.Draw(shadow)
     ds.text((pos[0], pos[1] + 5 * K), ch, font=f, fill=(0, 0, 0, 170))
     if label:
-        lf = ImageFont.truetype(LATO, int(N * 0.105))
-        lb = d.textbbox((0, 0), label, font=lf)
+        if arabic:
+            lf = ImageFont.truetype(ARABIC, int(N * (0.13 if len(label) < 7 else 0.105)), layout_engine=ImageFont.Layout.RAQM)
+            kw = {"direction": "rtl", "language": "ar"}
+        else:
+            lf = ImageFont.truetype(LATO, int(N * 0.105)); kw = {}
+        lb = d.textbbox((0, 0), label, font=lf, **kw)
         lp = (N / 2 - (lb[2] - lb[0]) / 2 - lb[0], N * 0.74 - (lb[3] - lb[1]) / 2 - lb[1])
-        ds.text((lp[0], lp[1] + 4 * K), label, font=lf, fill=(0, 0, 0, 170))
+        ds.text((lp[0], lp[1] + 4 * K), label, font=lf, fill=(0, 0, 0, 170), **kw)
     shadow = shadow.filter(ImageFilter.GaussianBlur(6 * K))
     img = Image.alpha_composite(img, shadow); d = ImageDraw.Draw(img)
     d.text(pos, ch, font=f, fill=(255, 255, 255, 255))
     if label:
-        d.text(lp, label, font=lf, fill=(255, 255, 255, 235))
+        d.text(lp, label, font=lf, fill=(255, 255, 255, 235), **kw)
     return down(img)
 
 def stick_base():
@@ -82,7 +87,14 @@ icons = {
     "map": (0xF34D, "MAP"), "menu": (0xF35C, None), "run": (0xF46E, "RUN"), "save": (0xF193, "SAVE"),
     "up": (0xF05E, None), "down": (0xF046, None), "left": (0xF04E, None), "right": (0xF055, None),
     "ok": (0xF12C, "OK"), "settings": (0xF493, None), "back": (0xF54C, "BACK"),
+    "qsave": (0xF193, "QUICK SAVE"), "qload": (0xF2DA, "QUICK LOAD"), "move": (0xF1B6, None), "play": (0xF40A, None),
+}
+arabic = {
+    "fire": "هجوم", "use": "استخدام", "wnext": "سلاح", "wprev": "سلاح", "map": "خريطة", "run": "ركض",
+    "save": "حفظ", "ok": "موافق", "back": "رجوع", "qsave": "حفظ سريع", "qload": "تحميل سريع",
 }
 for k, (cp, label) in icons.items():
     glyph(cp, label).save(f"{OUT}/ic_{k}.png")
+    if k in arabic:
+        glyph(cp, arabic[k], arabic=True).save(f"{OUT}/ic_{k}_ar.png")
 print("ok", sorted(os.listdir(OUT)))

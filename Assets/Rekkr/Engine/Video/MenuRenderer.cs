@@ -171,13 +171,13 @@ namespace ManagedDoom.Video
 
         private void DrawMenuPatch(string name, int x, int y)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             screen.DrawPatch(cache[name], scale * x, scale * y, scale);
         }
 
         private void DrawMenuText(IReadOnlyList<char> text, int x, int y)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             screen.DrawText(text, scale * x, scale * y, scale);
         }
 
@@ -241,12 +241,12 @@ namespace ManagedDoom.Video
 
         private void DrawText(IReadOnlyList<string> text)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             var height = 7 * scale * text.Count;
 
             for (var i = 0; i < text.Count; i++)
             {
-                var x = (screen.Width - screen.MeasureText(text[i], scale)) / 2;
+                var x = (screen.BaseWidth - screen.MeasureText(text[i], scale)) / 2;
                 var y = (screen.Height - height) / 2 + 7 * scale * (i + 1);
                 screen.DrawText(text[i], x, y, scale);
             }

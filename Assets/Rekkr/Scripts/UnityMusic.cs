@@ -31,7 +31,7 @@ namespace ManagedDoom.UnityPort
         private MusStream stream;
         private Bgm current;
 
-        public UnityMusic(Config config, GameContent content, UnityEngine.GameObject host, string sfPath)
+        public UnityMusic(Config config, GameContent content, UnityEngine.GameObject host, string sfPath, float gain = 1F)
         {
             try
             {
@@ -41,6 +41,7 @@ namespace ManagedDoom.UnityPort
                 this.wad = content.Wad;
 
                 stream = new MusStream(this, config, host, sfPath);
+                stream.Gain = gain;
                 current = Bgm.NONE;
 
                 UnityEngine.Debug.Log("OK");
@@ -101,6 +102,12 @@ namespace ManagedDoom.UnityPort
             throw new Exception("Unknown format!");
         }
 
+        /// <summary>my-rekkr: switch the SoundFont at runtime (music quality setting).</summary>
+        public void SetSoundFont(string sfPath, float gain)
+        {
+            stream?.SetSoundFont(sfPath, gain);
+        }
+
         public void Dispose()
         {
             UnityEngine.Debug.Log("Shutdown music.");
@@ -140,7 +147,10 @@ namespace ManagedDoom.UnityPort
             private UnityMusic parent;
             private Config config;
 
-            private Synthesizer synthesizer;
+            private volatile Synthesizer synthesizer;
+            private volatile bool resetSynth;
+            public volatile float Gain = 1F;
+            private SynthesizerSettings settings;
 
             private float[] left = new float[0];
             private float[] right = new float[0];
@@ -158,7 +168,7 @@ namespace ManagedDoom.UnityPort
 
                 config.audio_musicvolume = Math.Clamp(config.audio_musicvolume, 0, parent.MaxVolume);
 
-                var settings = new SynthesizerSettings(MusDecoder.SampleRate);
+                settings = new SynthesizerSettings(MusDecoder.SampleRate);
                 settings.BlockSize = MusDecoder.BlockLength;
                 settings.EnableReverbAndChorus = config.audio_musiceffect;
                 synthesizer = new Synthesizer(sfPath, settings);
@@ -171,6 +181,14 @@ namespace ManagedDoom.UnityPort
                 source.loop = true;
                 source.spatialBlend = 0F;
                 source.playOnAwake = false;
+            }
+
+            public void SetSoundFont(string sfPath, float gain)
+            {
+                var next = new Synthesizer(sfPath, settings);
+                Gain = gain;
+                synthesizer = next;
+                resetSynth = true;
             }
 
             public void SetDecoder(IDecoder decoder)
@@ -192,10 +210,12 @@ namespace ManagedDoom.UnityPort
                     right = new float[n];
                 }
 
-                if (reserved != current)
+                var synth = synthesizer;
+                if (reserved != current || resetSynth)
                 {
-                    synthesizer.Reset();
+                    synth.Reset();
                     current = reserved;
+                    resetSynth = false;
                 }
 
                 if (current == null)
@@ -204,9 +224,9 @@ namespace ManagedDoom.UnityPort
                     return;
                 }
 
-                var a = 2.0F * config.audio_musicvolume / parent.MaxVolume;
+                var a = 2.0F * Gain * config.audio_musicvolume / parent.MaxVolume;
 
-                current.RenderWaveform(synthesizer, left.AsSpan(0, n), right.AsSpan(0, n));
+                current.RenderWaveform(synth, left.AsSpan(0, n), right.AsSpan(0, n));
 
                 var pos = 0;
                 for (var t = 0; t < n; t++)

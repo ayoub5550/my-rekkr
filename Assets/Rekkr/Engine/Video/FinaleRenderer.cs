@@ -37,7 +37,7 @@ namespace ManagedDoom.Video
             sprites = content.Sprites;
 
             this.screen = screen;
-            scale = screen.Width / 320;
+            scale = screen.Height / 200;
 
             cache = new PatchCache(wad);
         }
@@ -156,7 +156,7 @@ namespace ManagedDoom.Video
         {
             var src = flat.Data;
             var dst = screen.Data;
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             var xFrac = Fixed.One / scale - Fixed.Epsilon;
             var step = Fixed.One / scale;
             for (var x = 0; x < screen.Width; x++)
@@ -177,7 +177,7 @@ namespace ManagedDoom.Video
 
         private void DrawPatch(string name, int x, int y)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             screen.DrawPatch(cache[name], scale * x, scale * y, scale);
         }
 
@@ -207,7 +207,7 @@ namespace ManagedDoom.Video
             var width = screen.MeasureText(finale.CastName, scale);
             screen.DrawText(
                 finale.CastName,
-                (screen.Width - width) / 2,
+                (screen.BaseWidth - width) / 2,
                 screen.Height - scale * 13,
                 scale);
         }

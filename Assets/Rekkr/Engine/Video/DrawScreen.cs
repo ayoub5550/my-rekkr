@@ -28,6 +28,10 @@ namespace ManagedDoom.Video
 
         private Patch[] chars;
 
+        /// <summary>my-rekkr widescreen: horizontal offset added to every 2D draw call
+        /// (patches, text, rectangles) so 320-wide 2D layouts stay centred on a wider screen.</summary>
+        public int OffsetX;
+
         public DrawScreen(Wad wad, int width, int height)
         {
             this.width = width;
@@ -48,7 +52,7 @@ namespace ManagedDoom.Video
 
         public void DrawPatch(Patch patch, int x, int y, int scale)
         {
-            var drawX = x - scale * patch.LeftOffset;
+            var drawX = x + OffsetX - scale * patch.LeftOffset;
             var drawY = y - scale * patch.TopOffset;
             var drawWidth = scale * patch.Width;
 
@@ -78,7 +82,7 @@ namespace ManagedDoom.Video
 
         public void DrawPatchFlip(Patch patch, int x, int y, int scale)
         {
-            var drawX = x - scale * patch.LeftOffset;
+            var drawX = x + OffsetX - scale * patch.LeftOffset;
             var drawY = y - scale * patch.TopOffset;
             var drawWidth = scale * patch.Width;
 
@@ -346,14 +350,35 @@ namespace ManagedDoom.Video
 
         public void FillRect(int x, int y, int w, int h, int color)
         {
-            var x1 = x;
-            var x2 = x + w;
+            var x1 = Math.Max(0, x + OffsetX);
+            var x2 = Math.Min(width, x + OffsetX + w);
             for (var drawX = x1; drawX < x2; drawX++)
             {
                 var pos = height * drawX + y;
                 for (var i = 0; i < h; i++)
                 {
                     data[pos] = (byte)color;
+                    pos++;
+                }
+            }
+        }
+
+
+
+        /// <summary>my-rekkr: remap pixels through a colormap (e.g. a dark light level) —
+        /// gives translucent dark panels in the paletted frame.</summary>
+        public void Remap(int x, int y, int w, int h, byte[] map)
+        {
+            var x1 = Math.Max(0, x + OffsetX);
+            var x2 = Math.Min(width, x + OffsetX + w);
+            var y1 = Math.Max(0, y);
+            var y2 = Math.Min(height, y + h);
+            for (var drawX = x1; drawX < x2; drawX++)
+            {
+                var pos = height * drawX + y1;
+                for (var drawY = y1; drawY < y2; drawY++)
+                {
+                    data[pos] = map[data[pos]];
                     pos++;
                 }
             }
@@ -528,6 +553,12 @@ namespace ManagedDoom.Video
         }
 
         public int Width => width;
+        /// <summary>Integer 2D scale (1 at 320x200, 2 at 640x400) — from the height, because the width may be wide.</summary>
+        public int Scale => height / 200;
+        /// <summary>Width of the centred 4:3 area that 2D screens are laid out in.</summary>
+        public int BaseWidth => 320 * (height / 200);
+        /// <summary>OffsetX that centres a BaseWidth-wide layout.</summary>
+        public int CenterOffset => (width - BaseWidth) / 2;
         public int Height => height;
         public byte[] Data => data;
     }

@@ -8,7 +8,7 @@ APK="${1:?apk}"; MODEL="${2:-r8q}"; VER="${3:-33}"; OUT="${OUT:-Artifacts/ftl-$(
 mkdir -p "$OUT"
 gcloud firebase test android run --type game-loop --app "$APK" \
   --device "model=$MODEL,version=$VER,locale=en,orientation=landscape" \
-  --timeout 6m --scenario-numbers 1 --results-history-name my-rekkr --format=json >"$OUT/result.json" 2>"$OUT/run.err" || true
+  --timeout ${FTL_TIMEOUT:-12m} --scenario-numbers ${SCENARIOS:-1,2} --results-history-name my-rekkr --format=json >"$OUT/result.json" 2>"$OUT/run.err" || true
 cat "$OUT/result.json"
 B=$(grep -o 'storage/browser/[^] ]*' "$OUT/run.err" | head -1 | sed 's#^storage/browser/#gs://#; s#/$##')
 [ -n "$B" ] && gsutil -m cp -r "$B/$MODEL-$VER-en-landscape" "$OUT/" >/dev/null 2>&1

@@ -18,9 +18,21 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
   التالي/السابق، ركض، خريطة، قائمة. وفي القوائم تظهر أسهم وزر OK وزر BACK.
 * إعدادات اللمس (⚙): حساسية النظر، حجم الأزرار، شفافيتها، وضع اليد اليسرى، الركض الدائم.
 * رسم بدقة 640×400، و60 إطاراً في الثانية مع تنعيم الحركة، وحفظ تلقائي لاسم الـ save.
-* تم اختبارها على Firebase Test Lab على Galaxy S20 FE (Snapdragon 865 / Adreno 650، نفس
-  GPU هاتف POCO F3) بمعدل 59 FPS تقريباً.
+* تُختبر كل نسخة على Firebase Test Lab على Galaxy S20 FE (Snapdragon 865 / Adreno 650، نفس
+  GPU هاتف POCO F3).
 * يدعم لوحة المفاتيح ويد التحكم (gamepad) أيضاً.
+
+## الجديد في dev2 (0.2.0)
+
+* **شاشة عريضة (Widescreen):** اللعبة تملأ شاشة 20:9 بزاوية رؤية أوسع (Hor+)، مع خيار 4:3 الأصلي.
+* **90 / 120 إطاراً في الثانية** على الشاشات السريعة (تلقائي / 60 / 90 / 120).
+* **حفظ تلقائي** عند بداية كل خريطة وعند الخروج من التطبيق، وزرّا **حفظ سريع / تحميل سريع**، وزر **متابعة** في الشاشة الرئيسية.
+* **واجهة بدون شريط الحالة (Fullscreen HUD)** بلوحات شفافة داكنة، أو بدون واجهة إطلاقاً.
+* **التصويب بالجيروسكوب** (حساسية + عكس الاتجاه) و**اهتزاز** عند الهجوم وتلقي الضرر.
+* **اختيار السلاح باللمس** على أرقام ARMS في شريط الحالة أو الواجهة.
+* **محرر أماكن الأزرار:** اسحب أي زر وغيّر حجمه، مع زر إعادة للوضع الافتراضي.
+* **موسيقى عالية الجودة** (GeneralUser GS) أو الكلاسيكية (TimGM6mb).
+* **واجهة عربية كاملة** (الإعدادات والأزرار) مع التبديل إلى الإنجليزية.
 
 ## Features / improvements over the original
 
@@ -32,8 +44,17 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
 | Controls | Floating stick, swipe-look, aim-while-firing, ATTACK/USE/WEAPON ±/RUN/MAP/MENU, menu D-pad |
 | Settings | Look sensitivity, button size (70–140 %), opacity, left-handed layout, always-run |
 | Music | MUS/MIDI through MeltySynth + TimGM6mb soundfont |
-| Saves | 6 slots, auto-named `E#M# dd/MM HH:mm` |
-| Other | Gamepad + keyboard, pause→menu on app switch, Firebase Game Loop autopilot |
+| Save slots | 6 slots, auto-named `E#M# dd/MM HH:mm` |
+| Widescreen | Hor+ 3D view fills 20:9 (e.g. 1066x400 frame), 2D screens centred; 4:3 option |
+| Frame rate | Auto / 60 / 90 / 120 Hz (display mode switch + interpolation) |
+| Saves | Autosave at map start and on leaving the app, QUICK SAVE / QUICK LOAD buttons, CONTINUE |
+| HUD | Status bar, compact fullscreen HUD, or none |
+| Motion | Gyro aim (sensitivity, invert), haptic pulses on attack / damage |
+| Weapons | Tap the ARMS numbers to pick a weapon |
+| Layout | Button layout editor (drag + per-button size, reset) |
+| Music | GeneralUser GS (high) or TimGM6mb (classic) SoundFont |
+| Language | English / Arabic UI (RTL settings, Arabic button labels) |
+| Other | Gamepad + keyboard, pause→menu on app switch, Firebase Game Loop autopilot (2 scenarios) |
 
 ## Build
 

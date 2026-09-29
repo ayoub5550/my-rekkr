@@ -109,7 +109,7 @@ namespace ManagedDoom.Video
         {
             this.screen = screen;
 
-            scale = screen.Width / 320;
+            scale = screen.Height / 200;
             amWidth = screen.Width;
             amHeight = screen.Height - scale * StatusBarRenderer.Height;
             ppu = (float)scale / 16;

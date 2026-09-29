@@ -50,7 +50,7 @@ namespace ManagedDoom.Video
             screenWidth = screen.Width;
             screenHeight = screen.Height;
             screenData = screen.Data;
-            drawScale = screenWidth / 320;
+            drawScale = screenHeight / 200;
 
             this.windowSize = windowSize;
 
@@ -70,26 +70,26 @@ namespace ManagedDoom.Video
 
         private void SetWindowSize(int size)
         {
-            var scale = screenWidth / 320;
+            var scale = screenHeight / 200;
             if (size < 7)
             {
                 var width = scale * (96 + 32 * size);
                 var height = scale * (48 + 16 * size);
                 var x = (screenWidth - width) / 2;
                 var y = (screenHeight - StatusBarRenderer.Height * scale - height) / 2;
-                ResetWindow(x, y, width, height);
+                ResetWindow(x, y, width, height, width);
             }
             else if (size == 7)
             {
                 var width = screenWidth;
                 var height = screenHeight - StatusBarRenderer.Height * scale;
-                ResetWindow(0, 0, width, height);
+                ResetWindow(0, 0, width, height, 320 * scale);
             }
             else
             {
                 var width = screenWidth;
                 var height = screenHeight;
-                ResetWindow(0, 0, width, height);
+                ResetWindow(0, 0, width, height, 320 * scale);
             }
 
             ResetWallRendering();
@@ -116,17 +116,23 @@ namespace ManagedDoom.Video
         private Fixed centerYFrac;
         private Fixed projection;
 
-        private void ResetWindow(int x, int y, int width, int height)
+        // my-rekkr widescreen (Hor+): the window may be wider than 4:3. Vertical scale,
+        // lighting and weapon size keep using the 4:3 width ("non-wide"), so a wider screen
+        // only shows more to the sides — the same approach as Crispy Doom.
+        private int nonWideWidth;
+
+        private void ResetWindow(int x, int y, int width, int height, int nonWide)
         {
             windowX = x;
             windowY = y;
             windowWidth = width;
             windowHeight = height;
+            nonWideWidth = Math.Min(nonWide, width);
             centerX = windowWidth / 2;
             centerY = windowHeight / 2;
             centerXFrac = Fixed.FromInt(centerX);
             centerYFrac = Fixed.FromInt(centerY);
-            projection = centerXFrac;
+            projection = Fixed.FromInt(nonWideWidth / 2);
         }
 
 
@@ -150,7 +156,7 @@ namespace ManagedDoom.Video
 
         private void ResetWallRendering()
         {
-            var focalLength = centerXFrac / Trig.Tan(Trig.FineAngleCount / 4 + FineFov / 2);
+            var focalLength = projection / Trig.Tan(Trig.FineAngleCount / 4 + FineFov / 2);
 
             for (var i = 0; i < Trig.FineAngleCount / 2; i++)
             {
@@ -260,7 +266,7 @@ namespace ManagedDoom.Video
             {
                 var dy = Fixed.FromInt(i - windowHeight / 2) + Fixed.One / 2;
                 dy = Fixed.Abs(dy);
-                planeYSlope[i] = Fixed.FromInt(windowWidth / 2) / dy;
+                planeYSlope[i] = Fixed.FromInt(nonWideWidth / 2) / dy;
             }
 
             for (var i = 0; i < windowWidth; i++)
@@ -273,8 +279,8 @@ namespace ManagedDoom.Video
         private void ClearPlaneRendering()
         {
             var angle = viewAngle - Angle.Ang90;
-            planeBaseXScale = Trig.Cos(angle) / centerXFrac;
-            planeBaseYScale = -(Trig.Sin(angle) / centerXFrac);
+            planeBaseXScale = Trig.Cos(angle) / projection;
+            planeBaseYScale = -(Trig.Sin(angle) / projection);
 
             ceilingPrevSector = null;
             ceilingPrevX = int.MaxValue;
@@ -301,8 +307,8 @@ namespace ManagedDoom.Video
         private void ResetSkyRendering()
         {
             // The code below is based on PrBoom+' sky rendering implementation.
-            var num = (long)Fixed.FracUnit * screenWidth * 200;
-            var den = windowWidth * screenHeight;
+            var num = (long)Fixed.FracUnit * (320 * (screenHeight / 200)) * 200;
+            var den = nonWideWidth * screenHeight;
             skyInvScale = new Fixed((int)(num / den));
         }
 
@@ -333,7 +339,7 @@ namespace ManagedDoom.Video
 
         private void InitLighting()
         {
-            maxScaleLight = 48 * (screenWidth / 320);
+            maxScaleLight = 48 * (screenHeight / 200);
 
             diminishingScaleLight = new byte[lightLevelCount][][];
             diminishingZLight = new byte[lightLevelCount][][];
@@ -382,7 +388,7 @@ namespace ManagedDoom.Video
                 var start = ((lightLevelCount - 1 - i) * 2) * colorMapCount / lightLevelCount;
                 for (var j = 0; j < maxScaleLight; j++)
                 {
-                    var level = start - j * 320 / windowWidth / distMap;
+                    var level = start - j * 320 / nonWideWidth / distMap;
                     if (level < 0)
                     {
                         level = 0;
@@ -543,8 +549,8 @@ namespace ManagedDoom.Video
 
         private void ResetWeaponRendering()
         {
-            weaponScale = new Fixed(Fixed.FracUnit * windowWidth / 320);
-            weaponInvScale = new Fixed(Fixed.FracUnit * 320 / windowWidth);
+            weaponScale = new Fixed(Fixed.FracUnit * nonWideWidth / 320);
+            weaponInvScale = new Fixed(Fixed.FracUnit * 320 / nonWideWidth);
         }
 
 
@@ -663,6 +669,12 @@ namespace ManagedDoom.Video
             screen.DrawPatch(borderTopRight, screenWidth - windowX, windowY - step, drawScale);
             screen.DrawPatch(borderBottomLeft, windowX - step, fillHeight - windowY, drawScale);
             screen.DrawPatch(borderBottomRight, screenWidth - windowX, fillHeight - windowY, drawScale);
+        }
+
+        /// <summary>my-rekkr: tile the border flat (used beside the status bar on wide screens).</summary>
+        public void FillBackground(int x, int y, int width, int height)
+        {
+            if (width > 0 && height > 0) FillRect(x, y, width, height);
         }
 
         private void FillRect(int x, int y, int width, int height)

@@ -11,7 +11,8 @@ namespace ManagedDoom.UnityPort
     public enum Ctl
     {
         None, Stick, Look, Fire, Use, WeaponNext, WeaponPrev, Map, Menu, Run,
-        Up, Down, Left, Right, Ok, Back, Settings
+        Up, Down, Left, Right, Ok, Back, Settings,
+        QuickSave, QuickLoad, Continue, Slot
     }
 
     /// <summary>One on-screen control (circle), in GUI pixel coordinates (y down).</summary>
@@ -24,8 +25,9 @@ namespace ManagedDoom.UnityPort
         public bool Visible;
         public bool Held;          // pressed by a finger or the autopilot
         public float PressFlash;   // short highlight after a tap
+        public float PillWidth;    // > 0: rounded-rectangle button (CONTINUE)
 
-        public bool Contains(Vector2 p, float slop) => (p - Center).sqrMagnitude <= (Radius * slop) * (Radius * slop);
+        public Rect PillRect => new Rect(Center.x - PillWidth / 2, Center.y - Radius, PillWidth, 2 * Radius);
     }
 
     public sealed class TouchInput : IUserInput
@@ -65,7 +67,7 @@ namespace ManagedDoom.UnityPort
             this.app = app;
             foreach (Ctl c in Enum.GetValues(typeof(Ctl)))
             {
-                if (c == Ctl.None || c == Ctl.Stick || c == Ctl.Look) continue;
+                if (c == Ctl.None || c == Ctl.Stick || c == Ctl.Look || c == Ctl.Slot) continue;
                 buttons[c] = new TouchButton { Id = c, Icon = IconFor(c) };
             }
             runToggle = config.game_alwaysrun;
@@ -89,6 +91,9 @@ namespace ManagedDoom.UnityPort
                 case Ctl.Ok: return "ok";
                 case Ctl.Back: return "back";
                 case Ctl.Settings: return "settings";
+                case Ctl.QuickSave: return "qsave";
+                case Ctl.QuickLoad: return "qload";
+                case Ctl.Continue: return "play";
             }
             return null;
         }
@@ -96,18 +101,27 @@ namespace ManagedDoom.UnityPort
         public IEnumerable<TouchButton> Buttons => buttons.Values;
         public TouchButton Get(Ctl c) => buttons[c];
         public bool RunOn => runToggle;
+        public void SetRun(bool on) { runToggle = on; config.game_alwaysrun = on; }
 
         // ----------------------------------------------------------------- layout
+
+        public bool EditMode;          // button layout editor
+        public Ctl EditSelected = Ctl.None;
+        public Rect EditToolbar;       // editor toolbar rect (touches there go to IMGUI)
+        private Vector2 editGrab;
+        private int editFinger = -1;
 
         public void Layout(Rect game, float scale, bool leftHanded)
         {
             float W = Screen.width, H = Screen.height;
-            float u = Mathf.Min(W, H * 2.2F) / 1000F * scale; // unit ≈ 1/1000 of a 20:9 width
-            float m = 18 * u;
+            float u0 = Mathf.Min(W, H * 2.2F) / 1000F;          // unit ≈ 1/1000 of a 20:9 width
+            float u = u0 * scale;
+            float m = 18 * u0;
             var doom = app.Doom;
             TitleMode = doom != null && (doom.State == DoomState.Opening || doom.State == DoomState.DemoPlayback) && !doom.Menu.Active;
             MenuMode = doom == null || doom.Menu.Active;
-            bool inGame = !MenuMode && !TitleMode;
+            bool inGame = (!MenuMode && !TitleMode) || EditMode;
+            if (EditMode) { MenuMode = false; TitleMode = false; }
 
             foreach (var b in buttons.Values) b.Visible = false;
 
@@ -119,9 +133,11 @@ namespace ManagedDoom.UnityPort
             Place(Ctl.WeaponPrev, fire.Center + new Vector2(-fr - 60 * u, -fr - 30 * u), 44 * u, inGame);
             Place(Ctl.Run, fire.Center + new Vector2(-fr - 150 * u, -40 * u), 40 * u, inGame);
 
-            // Top corners.
+            // Top corners: menu left; map + quick save/load right.
             Place(Ctl.Menu, new Vector2(m + 40 * u, m + 40 * u), 36 * u, !MenuMode);
-            Place(Ctl.Map, new Vector2(W - m - 40 * u, m + 40 * u), 38 * u, inGame);
+            var map = Place(Ctl.Map, new Vector2(W - m - 40 * u, m + 40 * u), 38 * u, inGame);
+            Place(Ctl.QuickLoad, map.Center + new Vector2(-98 * u, 0), 38 * u, inGame);
+            Place(Ctl.QuickSave, map.Center + new Vector2(-196 * u, 0), 38 * u, inGame);
 
             // Menu pad: D-pad left, OK/BACK right.
             float pr = 50 * u;
@@ -132,13 +148,19 @@ namespace ManagedDoom.UnityPort
             Place(Ctl.Right, pc + new Vector2(2.05F * pr, 0), pr, MenuMode);
             Place(Ctl.Ok, new Vector2(W - m - 1.4F * fr, H - m - 1.6F * fr), fr * 0.95F, MenuMode);
             Place(Ctl.Back, new Vector2(W - m - 1.4F * fr - 2.3F * fr, H - m - 1.0F * fr), 58 * u, MenuMode);
-            Place(Ctl.Settings, new Vector2(W - m - 40 * u, m + 40 * u), 36 * u, MenuMode || TitleMode);
+            Place(Ctl.Settings, new Vector2(W - m - 40 * u0, m + 40 * u0), 36 * u0, MenuMode || TitleMode);
+
+            // CONTINUE (latest quick/auto save) on the title screen and the main menu outside a level.
+            var cont = Place(Ctl.Continue, new Vector2(W / 2, H * 0.74F), 34 * u0,
+                !EditMode && app.CanContinue && (TitleMode || (MenuMode && !app.InLevel)));
+            cont.PillWidth = 250 * u0;
 
             if (leftHanded)
             {
                 foreach (var b in buttons.Values)
                 {
-                    if (b.Id == Ctl.Menu || b.Id == Ctl.Map || b.Id == Ctl.Settings) continue;
+                    if (b.Id == Ctl.Menu || b.Id == Ctl.Map || b.Id == Ctl.Settings || b.Id == Ctl.Continue ||
+                        b.Id == Ctl.QuickSave || b.Id == Ctl.QuickLoad) continue;
                     b.Center.x = W - b.Center.x;
                 }
             }
@@ -146,6 +168,20 @@ namespace ManagedDoom.UnityPort
             StickRadius = 95 * u;
             StickHome = new Vector2(m + StickRadius + 70 * u, H - m - StickRadius - 50 * u);
             if (leftHanded) StickHome.x = W - StickHome.x;
+
+            // Custom layout from the editor (absolute positions, per-button size).
+            foreach (var kv in RekkrSettings.Layout)
+            {
+                var pos = new Vector2(kv.Value.pos.x * W, kv.Value.pos.y * H);
+                if (kv.Key == Ctl.Stick)
+                {
+                    StickHome = pos; StickRadius *= kv.Value.scale;
+                }
+                else if (buttons.TryGetValue(kv.Key, out var cb))
+                {
+                    cb.Center = pos; cb.Radius *= kv.Value.scale;
+                }
+            }
             if (!StickActive)
             {
                 StickCenter = StickHome;
@@ -156,9 +192,12 @@ namespace ManagedDoom.UnityPort
         private TouchButton Place(Ctl c, Vector2 center, float r, bool visible)
         {
             var b = buttons[c];
-            b.Center = center; b.Radius = r; b.Visible = visible;
+            b.Center = center; b.Radius = r; b.Visible = visible; b.PillWidth = 0;
             return b;
         }
+
+        /// <summary>Default position + radius of an editable control (for the editor's RESET).</summary>
+        public static bool IsEditable(Ctl c) => Array.IndexOf(RekkrSettings.Editable, c) >= 0;
 
         // ----------------------------------------------------------------- per-frame input
 
@@ -193,7 +232,20 @@ namespace ManagedDoom.UnityPort
             foreach (var kv in owner) if (!seen.Contains(kv.Key)) stale.Add(kv.Key);
             foreach (var f in stale) Release(f);
 
-            foreach (var kv in owner) if (buttons.TryGetValue(kv.Value, out var hb)) hb.Held = true;
+            foreach (var kv in owner) if (buttons.TryGetValue(kv.Value, out var hb) && !EditMode) hb.Held = true;
+
+            // Gyro aim: angular velocity around the world "up" axis (from gravity), so it works in
+            // either landscape orientation and however the phone is tilted.
+            if (RekkrSettings.Gyro && !EditMode && !settingsOpen && !MenuMode && !TitleMode && SystemInfo.supportsGyroscope)
+            {
+                var g = Input.gyro;
+                if (!g.enabled) g.enabled = true;
+                var rate = g.rotationRateUnbiased;
+                var grav = g.gravity;
+                var yaw = grav.sqrMagnitude > 0.01F ? UnityEngine.Vector3.Dot(rate, -grav.normalized) : rate.x;
+                if (RekkrSettings.GyroInvert) yaw = -yaw;
+                if (Mathf.Abs(yaw) > 0.02F) gyroRadians += yaw * Time.unscaledDeltaTime;
+            }
             if (AutoFire) buttons[Ctl.Fire].Held = true;
             if (AutoUse) buttons[Ctl.Use].Held = true;
 
@@ -207,8 +259,11 @@ namespace ManagedDoom.UnityPort
             PollKeyboard();
         }
 
+        private float gyroRadians;
+
         private void HandleFinger(int id, Vector2 p, bool began, bool ended, bool leftHanded, bool settingsOpen)
         {
+            if (EditMode) { HandleEditFinger(id, p, began, ended); return; }
             if (began)
             {
                 if (settingsOpen) return; // settings panel consumes touches (drawn with IMGUI)
@@ -247,9 +302,14 @@ namespace ManagedDoom.UnityPort
                 var d = (p - b.Center).magnitude / b.Radius;
                 if (d < 1.15F && d < bestD) { best = b; bestD = d; }
             }
+            var cont = buttons[Ctl.Continue];
+            if (cont.Visible && cont.PillRect.Contains(p)) return Ctl.Continue;
             if (best != null) return best.Id;
             if (TitleMode) return Ctl.Ok; // tap anywhere on the title to open the menu
             if (MenuMode) return Ctl.None;
+            // Tap a weapon number on the status bar / fullscreen HUD to select it.
+            var slot = app.ArmsSlotAt(p);
+            if (slot >= 0) { pendingSlot = slot; return Ctl.Slot; }
             bool leftSide = p.x < Screen.width * 0.45F;
             if (leftHanded) leftSide = !leftSide;
             return leftSide ? Ctl.Stick : Ctl.Look;
@@ -269,6 +329,13 @@ namespace ManagedDoom.UnityPort
                 case Ctl.WeaponPrev: weaponRequest = NextWeapon(-1); Flash(ctl); break;
                 case Ctl.Run: runToggle = !runToggle; config.game_alwaysrun = runToggle; Flash(ctl); break;
                 case Ctl.Settings: app.ToggleSettings(); Flash(ctl); break;
+                case Ctl.QuickSave: app.QuickSave(); Flash(ctl); break;
+                case Ctl.QuickLoad: app.QuickLoad(); Flash(ctl); break;
+                case Ctl.Continue: app.Continue(); Flash(ctl); break;
+                case Ctl.Slot:
+                    if (pendingSlot >= 0) { slotRequest = pendingSlot + 1; Haptics.Pulse(10, 80); }
+                    pendingSlot = -1;
+                    break;
                 case Ctl.Map:
                 case Ctl.Menu:
                 case Ctl.Up:
@@ -310,6 +377,69 @@ namespace ManagedDoom.UnityPort
 
         public bool AutoFire;
         public bool AutoUse;
+        private int pendingSlot = -1;
+        private int slotRequest = -1;
+
+        /// <summary>Autopilot: select weapon cell 0..5 (weapons 2..7) as if its number was tapped.</summary>
+        public void TapSlot(int cell) { slotRequest = cell + 1; }
+
+        // ----------------------------------------------------------------- layout editor
+
+        private void HandleEditFinger(int id, Vector2 p, bool began, bool ended)
+        {
+            if (began)
+            {
+                if (EditToolbar.Contains(p)) return;
+                var hit = EditHitTest(p);
+                if (hit != Ctl.None)
+                {
+                    EditSelected = hit;
+                    editFinger = id;
+                    editGrab = EditCenter(hit) - p;
+                }
+                return;
+            }
+            if (id != editFinger) return;
+            if (EditSelected != Ctl.None)
+            {
+                var c = p + editGrab;
+                c.x = Mathf.Clamp(c.x, 0, Screen.width); c.y = Mathf.Clamp(c.y, 0, Screen.height);
+                SetLayoutPos(EditSelected, c);
+            }
+            if (ended) editFinger = -1;
+        }
+
+        public Ctl EditHitTest(Vector2 p)
+        {
+            Ctl best = Ctl.None; float bestD = 1.2F;
+            foreach (var c in RekkrSettings.Editable)
+            {
+                var d = (p - EditCenter(c)).magnitude / Mathf.Max(1, EditRadius(c));
+                if (d < bestD) { best = c; bestD = d; }
+            }
+            return best;
+        }
+
+        public Vector2 EditCenter(Ctl c) => c == Ctl.Stick ? StickHome : buttons[c].Center;
+        public float EditRadius(Ctl c) => c == Ctl.Stick ? StickRadius : buttons[c].Radius;
+
+        private void SetLayoutPos(Ctl c, Vector2 screenPos)
+        {
+            var k = RekkrSettings.Layout.TryGetValue(c, out var v) ? v.scale : 1F;
+            RekkrSettings.Layout[c] = (new Vector2(screenPos.x / Screen.width, screenPos.y / Screen.height), k);
+        }
+
+        public void ScaleSelected(float delta)
+        {
+            if (EditSelected == Ctl.None) return;
+            var c = EditSelected;
+            var pos = EditCenter(c);
+            var k = RekkrSettings.Layout.TryGetValue(c, out var v) ? v.scale : 1F;
+            k = Mathf.Clamp(k + delta, 0.6F, 1.8F);
+            RekkrSettings.Layout[c] = (new Vector2(pos.x / Screen.width, pos.y / Screen.height), k);
+        }
+
+        public float SelectedScale => EditSelected != Ctl.None && RekkrSettings.Layout.TryGetValue(EditSelected, out var v) ? v.scale : 1F;
 
         private static DoomKey KeyFor(Ctl c)
         {
@@ -425,10 +555,13 @@ namespace ManagedDoom.UnityPort
             if (Input.GetKey(KeyCode.E)) cmd.AngleTurn -= (short)PlayerBehavior.AngleTurn[speed];
 
             // Swipe to turn. Sensitivity 5 ≈ a 30%-of-screen swipe turns 180°.
-            var sens = app.LookSensitivity;
+            var sens = RekkrSettings.LookSensitivity;
             var perPixel = 32768F / (0.30F * Screen.width) * (sens / 5F);
             var turn = -turnPixels * perPixel + turnCarry - AutoTurn * 640F;
             turnPixels = 0;
+            // Gyro: radians -> Doom angle units (65536 per turn) x sensitivity (4 = 1:1).
+            turn += gyroRadians * (65536F / (2F * Mathf.PI)) * (RekkrSettings.GyroSensitivity / 4F);
+            gyroRadians = 0;
             var turnInt = Mathf.Clamp(Mathf.RoundToInt(turn), -32000, 32000);
             turnCarry = turn - turnInt;
             cmd.AngleTurn += (short)turnInt;
@@ -440,7 +573,13 @@ namespace ManagedDoom.UnityPort
             {
                 if (Input.GetKey(KeyCode.Alpha1 + i)) { cmd.Buttons |= TicCmdButtons.Change; cmd.Buttons |= (byte)(i << TicCmdButtons.WeaponShift); break; }
             }
-            if (weaponRequest >= 0)
+            if (slotRequest >= 0)
+            {
+                cmd.Buttons |= TicCmdButtons.Change;
+                cmd.Buttons |= (byte)(slotRequest << TicCmdButtons.WeaponShift);
+                slotRequest = -1;
+            }
+            else if (weaponRequest >= 0)
             {
                 cmd.Buttons |= TicCmdButtons.Change;
                 cmd.Buttons |= (byte)(SlotOf((WeaponType)weaponRequest) << TicCmdButtons.WeaponShift);
@@ -455,7 +594,7 @@ namespace ManagedDoom.UnityPort
 
         public void Reset()
         {
-            turnPixels = 0; turnCarry = 0; weaponRequest = -1;
+            turnPixels = 0; turnCarry = 0; weaponRequest = -1; slotRequest = -1; gyroRadians = 0;
         }
 
         public void GrabMouse() { }

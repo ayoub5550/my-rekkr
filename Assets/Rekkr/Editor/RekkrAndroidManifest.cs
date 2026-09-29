@@ -19,7 +19,13 @@ public sealed class RekkrAndroidManifest : IPostGenerateGradleAndroidProject
         var manifest = Path.Combine(path, "src/main/AndroidManifest.xml");
         if (!File.Exists(manifest)) { Debug.LogWarning("[RekkrManifest] missing " + manifest); return; }
         var xml = File.ReadAllText(manifest);
-        if (xml.Contains("com.google.intent.action.TEST_LOOP")) return;
+        // Haptics (VibrationEffect pulses on attack / damage).
+        if (!xml.Contains("android.permission.VIBRATE"))
+        {
+            var app = xml.IndexOf("<application");
+            if (app > 0) xml = xml.Insert(app, "<uses-permission android:name=\"android.permission.VIBRATE\" />");
+        }
+        if (xml.Contains("com.google.intent.action.TEST_LOOP")) { File.WriteAllText(manifest, xml); return; }
         var launcher = xml.IndexOf("android.intent.category.LAUNCHER");
         if (launcher < 0) { Debug.LogWarning("[RekkrManifest] no launcher activity"); return; }
         var end = xml.IndexOf("</intent-filter>", launcher);

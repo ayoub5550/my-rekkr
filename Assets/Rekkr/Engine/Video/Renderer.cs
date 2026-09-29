@@ -58,7 +58,13 @@ namespace ManagedDoom.Video
         private int wipeHeight;
         private byte[] wipeBuffer;
 
-        public Renderer(Config config, GameContent content)
+        public Renderer(Config config, GameContent content) : this(config, content, 0)
+        {
+        }
+
+        /// <summary>my-rekkr: <paramref name="wideWidth"/> &gt; 0 requests a widescreen frame
+        /// (width in 640x400 pixels; 4:3 is 640). 2D screens stay centred, the 3D view is Hor+.</summary>
+        public Renderer(Config config, GameContent content, int wideWidth)
         {
             this.config = config;
 
@@ -66,11 +72,13 @@ namespace ManagedDoom.Video
 
             if (config.video_highresolution)
             {
-                screen = new DrawScreen(content.Wad, 640, 400);
+                var w = Math.Max(640, wideWidth & ~1);
+                screen = new DrawScreen(content.Wad, w, 400);
             }
             else
             {
-                screen = new DrawScreen(content.Wad, 320, 200);
+                var w = Math.Max(320, (wideWidth / 2) & ~1);
+                screen = new DrawScreen(content.Wad, w, 200);
             }
 
             config.video_gamescreensize = Math.Clamp(config.video_gamescreensize, 0, MaxWindowSize);
@@ -86,7 +94,7 @@ namespace ManagedDoom.Video
 
             pause = Patch.FromWad(content.Wad, "M_PAUSE");
 
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             wipeBandWidth = 2 * scale;
             wipeBandCount = screen.Width / wipeBandWidth + 1;
             wipeHeight = screen.Height / scale;
@@ -95,11 +103,27 @@ namespace ManagedDoom.Video
             palette.ResetColors(gammaCorrectionParameters[config.video_gammacorrection]);
         }
 
+        private void ClearIfWide()
+        {
+            if (screen.CenterOffset > 0)
+            {
+                screen.OffsetX = 0;
+                screen.FillRect(0, 0, screen.Width, screen.Height, 0);
+            }
+        }
+
         public void RenderDoom(Doom doom, Fixed frameFrac)
         {
+            screen.OffsetX = 0;
             if (doom.State == DoomState.Opening)
             {
+                if (doom.Opening.State != OpeningSequenceState.Demo)
+                {
+                    ClearIfWide();
+                    screen.OffsetX = screen.CenterOffset;
+                }
                 openingSequence.Render(doom.Opening, frameFrac);
+                screen.OffsetX = 0;
             }
             else if (doom.State == DoomState.DemoPlayback)
             {
@@ -116,7 +140,7 @@ namespace ManagedDoom.Video
                     doom.Game.State == GameState.Level &&
                     doom.Game.Paused)
                 {
-                    var scale = screen.Width / 320;
+                    var scale = screen.Height / 200;
                     screen.DrawPatch(
                         pause,
                         (screen.Width - scale * pause.Width) / 2,
@@ -130,8 +154,26 @@ namespace ManagedDoom.Video
         {
             if (doom.Menu.Active)
             {
+                screen.OffsetX = screen.CenterOffset;
                 menu.Render(doom.Menu);
+                screen.OffsetX = 0;
             }
+        }
+
+        private void RenderStatusBar(Player player)
+        {
+            var scale = screen.Scale;
+            var off = screen.CenterOffset;
+            if (off > 0)
+            {
+                var y = screen.Height - StatusBarRenderer.Height * scale;
+                screen.OffsetX = 0;
+                threeD.FillBackground(0, y, off, StatusBarRenderer.Height * scale);
+                threeD.FillBackground(off + screen.BaseWidth, y, screen.Width - off - screen.BaseWidth, StatusBarRenderer.Height * scale);
+            }
+            screen.OffsetX = off;
+            statusBar.Render(player, true);
+            screen.OffsetX = 0;
         }
 
         public void RenderGame(DoomGame game, Fixed frameFrac)
@@ -146,21 +188,24 @@ namespace ManagedDoom.Video
                 var consolePlayer = game.World.ConsolePlayer;
                 var displayPlayer = game.World.DisplayPlayer;
 
+                screen.OffsetX = 0;
                 if (game.World.AutoMap.Visible)
                 {
                     autoMap.Render(consolePlayer);
-                    statusBar.Render(consolePlayer, true);
+                    RenderStatusBar(consolePlayer);
                 }
                 else
                 {
                     threeD.Render(displayPlayer, frameFrac);
                     if (threeD.WindowSize < 8)
                     {
-                        statusBar.Render(consolePlayer, true);
+                        RenderStatusBar(consolePlayer);
                     }
                     else if (threeD.WindowSize == ThreeDRenderer.MaxScreenSize)
                     {
-                        statusBar.Render(consolePlayer, false);
+                        // my-rekkr: compact transparent HUD instead of the floating status-bar numbers.
+                        screen.OffsetX = screen.CenterOffset;
+                        statusBar.RenderFullscreenHud(consolePlayer);
                     }
                 }
 
@@ -168,18 +213,26 @@ namespace ManagedDoom.Video
                 {
                     if (consolePlayer.MessageTime > 0)
                     {
-                        var scale = screen.Width / 320;
+                        var scale = screen.Height / 200;
+                        screen.OffsetX = screen.CenterOffset;
                         screen.DrawText(consolePlayer.Message, 0, 7 * scale, scale);
                     }
                 }
+                screen.OffsetX = 0;
             }
             else if (game.State == GameState.Intermission)
             {
+                ClearIfWide();
+                screen.OffsetX = screen.CenterOffset;
                 intermission.Render(game.Intermission);
+                screen.OffsetX = 0;
             }
             else if (game.State == GameState.Finale)
             {
+                ClearIfWide();
+                screen.OffsetX = screen.CenterOffset;
                 finale.Render(game.Finale);
+                screen.OffsetX = 0;
             }
         }
 
@@ -220,7 +273,7 @@ namespace ManagedDoom.Video
             RenderDoom(doom, Fixed.One);
 
             var wipe = doom.WipeEffect;
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             for (var i = 0; i < wipeBandCount - 1; i++)
             {
                 var x1 = wipeBandWidth * i;
@@ -313,6 +366,8 @@ namespace ManagedDoom.Video
         }
 
         public int Width => screen.Width;
+        public int CenterOffset => screen.CenterOffset;
+        public int Scale => screen.Scale;
         public int Height => screen.Height;
 
         public int WipeBandCount => wipeBandCount;

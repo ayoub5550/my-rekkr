@@ -118,7 +118,7 @@ namespace ManagedDoom.Video
             percent = Patch.FromWad(wad, "WIPCNT");
             colon = Patch.FromWad(wad, "WICOLON");
 
-            scale = screen.Width / 320;
+            scale = screen.Height / 200;
         }
 
 
@@ -129,7 +129,7 @@ namespace ManagedDoom.Video
 
         private void DrawPatch(string name, int x, int y)
         {
-            var scale = screen.Width / 320;
+            var scale = screen.Height / 200;
             screen.DrawPatch(cache[name], scale * x, scale * y, scale);
         }
 

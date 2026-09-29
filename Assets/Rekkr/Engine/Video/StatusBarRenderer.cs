@@ -113,13 +113,33 @@ namespace ManagedDoom.Video
 
         private MultIconWidget[] keys;
 
+        // my-rekkr fullscreen HUD: translucent panels + tappable ARMS grid.
+        private byte[] panelMap;
+        public static readonly int HudArmsX = 151;
+        public static readonly int HudArmsY = 179;
+        public static readonly int HudArmsSpaceX = 13;
+        public static readonly int HudArmsSpaceY = 11;
+
+        /// <summary>Weapon cell (0..5 = weapons 2..7) under a point in 320x200 layout coordinates.</summary>
+        public static int HitArms(float x, float y, bool fullscreenHud)
+        {
+            float x0, y0, sx, sy;
+            if (fullscreenHud) { x0 = HudArmsX - 5; y0 = HudArmsY - 4; sx = HudArmsSpaceX; sy = HudArmsSpaceY; }
+            else { x0 = armsBackgroundX; y0 = armsBackgroundY; sx = armsSpaceX; sy = 12; }
+            var col = (int)Math.Floor((x - x0) / sx);
+            var row = (int)Math.Floor((y - y0) / sy);
+            if (col < 0 || col > 2 || row < 0 || row > 1) return -1;
+            return row * 3 + col;
+        }
+
         public StatusBarRenderer(Wad wad, DrawScreen screen)
         {
             this.screen = screen;
 
             patches = new Patches(wad);
+            panelMap = new ColorMap(wad)[22];
 
-            scale = screen.Width / 320;
+            scale = screen.Height / 200;
 
             ready = new NumberWidget();
             ready.Patches = patches.TallNumbers;
@@ -295,6 +315,50 @@ namespace ManagedDoom.Video
                 {
                     DrawMultIcon(keys[i], i);
                 }
+            }
+        }
+
+        /// <summary>my-rekkr: compact transparent HUD for full-screen view (screen size 9).
+        /// Health + armor (left), face + weapons + keys (centre), ammo (right), each on a
+        /// darkened panel so it stays readable over bright scenes.</summary>
+        public void RenderFullscreenHud(Player player)
+        {
+            // Kept inside x < 252 of the 320-wide layout so the default touch buttons on the
+            // right (USE / ATTACK) never cover it.
+            var s = scale;
+            screen.Remap(s * 2, s * 166, s * 248, s * 33, panelMap);
+
+            screen.DrawText("HEALTH", s * 6, s * 169, s);
+            screen.DrawText("ARMOR", s * 62, s * 169, s);
+            var h = new PercentWidget();
+            h.NumberWidget.Patches = patches.TallNumbers; h.NumberWidget.Width = 3;
+            h.NumberWidget.X = 46; h.NumberWidget.Y = 179; h.Patch = patches.TallPercent;
+            DrawPercent(h, player.Health);
+            var a = new PercentWidget();
+            a.NumberWidget.Patches = patches.TallNumbers; a.NumberWidget.Width = 3;
+            a.NumberWidget.X = 98; a.NumberWidget.Y = 179; a.Patch = patches.TallPercent;
+            DrawPercent(a, player.ArmorPoints);
+
+            screen.DrawPatch(patches.Faces[player.Mobj.World.StatusBar.FaceIndex], s * 118, s * 168, s);
+
+            screen.DrawText("ARMS", s * 147, s * 169, s);
+            for (var i = 0; i < 6; i++)
+            {
+                var owned = player.WeaponOwned[i + 1];
+                screen.DrawPatch(patches.Arms[i][owned ? 1 : 0], s * (HudArmsX + (i % 3) * HudArmsSpaceX), s * (HudArmsY + (i / 3) * HudArmsSpaceY), s);
+            }
+            for (var i = 0; i < 3; i++)
+            {
+                var k = player.Cards[i + 3] ? i + 3 : (player.Cards[i] ? i : -1);
+                if (k >= 0) screen.DrawPatch(patches.Keys[k], s * 193, s * (171 + 9 * i), s);
+            }
+
+            var ammoType = DoomInfo.WeaponInfos[(int)player.ReadyWeapon].Ammo;
+            screen.DrawText("AMMO", s * 247 - screen.MeasureText("AMMO", s), s * 169, s);
+            if (ammoType != AmmoType.NoAmmo)
+            {
+                var n = new NumberWidget { Patches = patches.TallNumbers, Width = 3, X = 247, Y = 179 };
+                DrawNumber(n, player.Ammo[(int)ammoType]);
             }
         }
 

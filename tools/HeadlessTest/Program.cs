@@ -64,6 +64,52 @@ public static class Program
             if (t % (35 * 6) == 20) { video.Shot(doom, Path.Combine(outDir, $"attract_{shots++:D2}.png")); }
         }
         Console.WriteLine($"attract shots={shots}");
+
+        // 5. Widescreen (20:9 -> 1066x400) + fullscreen HUD render check.
+        foreach (var wide in new[] { 1066, 640 })
+        {
+            var wc = new Config(); wc.video_highresolution = true; wc.video_gamescreensize = 7;
+            var wv = new ShotVideo(wc, content, wide);
+            var wd = new Doom(args, wc, content, wv, null, null, null);
+            for (int t = 0; t < 200; t++) wd.Update();
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_0title.png"));
+            wd.NewGame(GameSkill.Medium, 1, 1);
+            for (int t = 0; t < 120; t++) wd.Update();
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_1statusbar.png"));
+            wv.WindowSize = 9;
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_2hud.png"));
+            wv.WindowSize = 8;
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_3clean.png"));
+            wv.WindowSize = 5;
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_4small.png"));
+            wv.WindowSize = 7;
+            wd.Game.World.AutoMap.Open();
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_5automap.png"));
+            wd.Game.World.AutoMap.Close();
+            wd.Menu.Open();
+            wv.Shot(wd, Path.Combine(outDir, $"wide{wide}_6menu.png"));
+            wd.Menu.Close();
+            Console.WriteLine($"wide {wide}: frame {wv.W}x{wv.H} ok");
+        }
+        // 6. Autosave/quick-save path used by the app: save mid-level into slot 9, then load it
+        //    from the title screen (the CONTINUE button) in a fresh Doom instance.
+        {
+            var sc = new Config(); sc.video_highresolution = true;
+            var sv = new ShotVideo(sc, content, 1066);
+            var sd = new Doom(args, sc, content, sv, null, null, null);
+            sd.NewGame(GameSkill.Hard, 2, 3);
+            for (int t = 0; t < 200; t++) sd.Update();
+            var savePath = Path.Combine(ConfigUtilities.GetExeDirectory(), "doomsav9.dsg");
+            SaveAndLoad.Save(sd.Game, "AUTO E2M3", savePath);
+            var ld = new Doom(args, sc, content, new ShotVideo(sc, content, 1066), null, null, null);
+            for (int t = 0; t < 100; t++) ld.Update();
+            ld.LoadGame(9);
+            for (int t = 0; t < 100; t++) ld.Update();
+            var ok = ld.State == DoomState.Game && ld.Game.State == GameState.Level && ld.Game.Options.Episode == 2 && ld.Game.Options.Map == 3;
+            Console.WriteLine($"continue from title: state={ld.State} E{ld.Game.Options.Episode}M{ld.Game.Options.Map} skill={ld.Game.Options.Skill} size={new FileInfo(savePath).Length} {(ok ? "ok" : "FAIL")}");
+            if (!ok) failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "RESULT PASS" : $"RESULT FAIL {failures}");
         return failures == 0 ? 0 : 1;
     }
@@ -72,7 +118,8 @@ public static class Program
 public sealed class ShotVideo : IVideo
 {
     private readonly Renderer r; private readonly byte[] buf;
-    public ShotVideo(Config c, GameContent content) { r = new Renderer(c, content); buf = new byte[4 * r.Width * r.Height]; }
+    public ShotVideo(Config c, GameContent content, int wide = 0) { r = new Renderer(c, content, wide); buf = new byte[4 * r.Width * r.Height]; }
+    public int W => r.Width; public int H => r.Height;
     public void Render(Doom doom, Fixed frameFrac) { r.Render(doom, buf, frameFrac); }
     public void Shot(Doom doom, string path)
     {

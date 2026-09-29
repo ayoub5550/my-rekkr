@@ -126,6 +126,9 @@ public static class RekkrBuild
         Configure();
         var outPath = Environment.GetEnvironmentVariable("REKKR_OUT") ?? "Builds/linux/rekkr.x86_64";
         PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone, ScriptingImplementation.Mono2x);
+        // Desktop test player: keep running without window focus (Xvfb has no window manager,
+        // so a focus-dependent player stops after its first frame).
+        PlayerSettings.runInBackground = true;
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = new[] { ScenePath },

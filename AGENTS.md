@@ -1,6 +1,6 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-29 (v0.1.0).
+Last updated: 2026-09-29 (v0.2.0, dev2).
 
 ## 1. Goal and status
 
@@ -18,7 +18,26 @@ v0.1.0 checkpoint:
 - Firebase Test Lab Game Loop runs on Galaxy S20 FE 5G (`r8q`, Android 13, Adreno 650):
   - Result: Passed, no crashes and no `E Unity` lines in logcat.
   - Performance: `avg_fps=59.3 p99_frame_ms=16.8` at 2400×1080.
-- **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
+- v0.2.0 (dev2), branch `feat/dev2`:
+- APK `REKKR-0.2.0.apk`: versionCode 2, permissions INTERNET + VIBRATE, about 99.6 MB. The extra
+  size is the GeneralUser GS 2.0.3 soundfont (32 MB, redistributable, gain 1.33 vs TimGM6mb).
+- Features:
+  - Hor+ widescreen (frame = round(480·aspect) clamped 640–1200, even; 2400×1080 → 1066×400) with a 4:3 toggle.
+  - Compact fullscreen HUD (screen size 9).
+  - 120 Hz support (`DisplayRate`).
+  - Haptics.
+  - Gyro aim with an invert option.
+  - Quick save (slot 8), quick load, autosave (slot 9) and a Continue button on the title.
+  - Button layout editor (drag and scale).
+  - EN/AR UI (`Loc.cs` + `ArabicShaper`, `RekkrArabic.ttf`).
+  - Settings tabs.
+- Test Lab r8q/33, Game Loop scenarios 1 and 2: result Passed, 0 `E Unity`, 0 FATAL.
+  - Scenario 1: `avg_fps=116.8 p99=8.5 ms` at target 120. Autosave, quicksave and quickload OK.
+    Haptic pulses=58.
+  - Scenario 2: `avg_fps=118.0`. Continue OK. E1M1, E2M1, E3M1 and E4M1 all load, with the Arabic UI.
+- **Not verified on hardware:** gyro direction (Test Lab devices are static) and audio.
+
+**Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
 
 **Local builds only.** No Unity Cloud Build, no GitHub Actions.
@@ -90,10 +109,13 @@ The same setup is used for my-librequake (its §9).
   (see `run_unity.sh`).
 - **Activation:** Personal licences activate headless with `-batchmode -quit -username … -password …`.
   Pass the credentials through the environment and never write them to disk or logs.
-- **Desktop player under Xvfb hangs after frame 0.** The windowed GL present never returns under
-  gVisor.
-  - `-batchmode` runs the game and autopilot fine, but screenshots come out blank.
-  - Use Test Lab videos for visual QA. The editor under Xvfb (`-force-glcore`) does render.
+- **Desktop player under Xvfb (fixed in dev2).** The old hang after frame 0 was caused by
+  `runInBackground=false`: Xvfb has no window focus, so the player paused itself.
+  - `RekkrBuild.BuildLinux` now sets `runInBackground=true`.
+  - Run: `HOME=<tmp> LP_NUM_THREADS=16 REKKR_SCENARIO=<1|2> REKKR_SHOTS=<dir>
+    LD_LIBRARY_PATH=<unity libs> LD_PRELOAD=libschedfix.so xvfb-run -a -s "-screen 0 2400x1080x24"
+    Builds/linux/rekkr.x86_64 -force-glcore -screen-width 2400 -screen-height 1080 -screen-fullscreen 0`.
+  - llvmpipe runs at about 58 fps. That is useful for UI QA, not for performance numbers.
 
 ## 6. Traps and decisions
 
@@ -108,8 +130,11 @@ The same setup is used for my-librequake (its §9).
 
 ## 7. Ideas for next versions
 
-- A better soundfont (e.g. GeneralUser GS, check its licence).
-- Widescreen status-bar fill.
-- Per-button repositioning.
-- Haptics on fire/damage.
-- A quick-save button.
+dev2 did the soundfont, widescreen, button editor, haptics and quick save.
+- Remaining ideas:
+  - An in-game localized Doom menu. The WAD graphics stay English, so it would need a custom overlay.
+  - Controller button remapping UI.
+  - Cloud or exported saves.
+  - A human playtest on a POCO F3, including gyro direction and audio.
+- Test scenarios: `REKKR_SCENARIO=1` (play + saves + haptics), `2` (Continue + E1–E4 + Arabic).
+  `ftl_gameloop.sh` runs both by default (`SCENARIOS=1,2`, `FTL_TIMEOUT=12m`).
