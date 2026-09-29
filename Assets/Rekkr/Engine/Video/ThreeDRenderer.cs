@@ -721,7 +721,9 @@ namespace ManagedDoom.Video
 
 
 
-        public void Render(Player player, Fixed frameFrac)
+        public void Render(Player player, Fixed frameFrac) => Render(player, frameFrac, null);
+
+        public void Render(Player player, Fixed frameFrac, Angle? localViewTurn)
         {
             this.frameFrac = frameFrac;
 
@@ -730,7 +732,9 @@ namespace ManagedDoom.Video
             viewX = player.Mobj.GetInterpolatedX(frameFrac);
             viewY = player.Mobj.GetInterpolatedY(frameFrac);
             viewZ = player.GetInterpolatedViewZ(frameFrac);
-            viewAngle = player.GetInterpolatedAngle(frameFrac);
+            viewAngle = localViewTurn.HasValue
+                ? player.Mobj.Angle + localViewTurn.Value      // my-rekkr smooth look
+                : player.GetInterpolatedAngle(frameFrac);
 
             viewSin = Trig.Sin(viewAngle);
             viewCos = Trig.Cos(viewAngle);

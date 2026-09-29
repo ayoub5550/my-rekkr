@@ -58,6 +58,9 @@ namespace ManagedDoom.UnityPort
         public float LastUploadMs { get; private set; }
         private readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
 
+        /// <summary>See Renderer.LocalViewTurn (smooth look). Set by RekkrApp before Render.</summary>
+        public Angle? LocalViewTurn { get => renderer.LocalViewTurn; set => renderer.LocalViewTurn = value; }
+
         public void Render(Doom doom, Fixed frameFrac)
         {
             watch.Restart();

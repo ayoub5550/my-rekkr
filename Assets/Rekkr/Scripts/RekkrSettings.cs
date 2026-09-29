@@ -22,6 +22,7 @@ namespace ManagedDoom.UnityPort
         public static bool ShowFps;
         public static bool MusicHQ = true;       // GeneralUser GS vs TimGM6mb
         public static bool Arabic;
+        public static bool SmoothLook = true;    // dev3: touch/gyro look applied every frame
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -47,6 +48,7 @@ namespace ManagedDoom.UnityPort
             Widescreen = PlayerPrefs.GetInt("widescreen", 1) == 1;
             ShowFps = PlayerPrefs.GetInt("show_fps", 0) == 1;
             MusicHQ = PlayerPrefs.GetInt("music_hq", 1) == 1;
+            SmoothLook = PlayerPrefs.GetInt("smooth_look", 1) == 1;
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -78,6 +80,7 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("widescreen", Widescreen ? 1 : 0);
             PlayerPrefs.SetInt("show_fps", ShowFps ? 1 : 0);
             PlayerPrefs.SetInt("music_hq", MusicHQ ? 1 : 0);
+            PlayerPrefs.SetInt("smooth_look", SmoothLook ? 1 : 0);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

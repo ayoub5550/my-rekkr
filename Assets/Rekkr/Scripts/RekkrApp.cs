@@ -114,6 +114,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         DetectTestLoop();
         shotDir = Environment.GetEnvironmentVariable("REKKR_SHOTS");
         if (!string.IsNullOrEmpty(shotDir)) { testLoop = true; Directory.CreateDirectory(shotDir); }
+        if (Environment.GetEnvironmentVariable("REKKR_SMOOTHLOOK") == "0") RekkrSettings.SmoothLook = false; // desktop A/B
     }
 
     private IEnumerator Start()
@@ -221,6 +222,16 @@ public sealed partial class RekkrApp : MonoBehaviour
 
     // ------------------------------------------------------------------ main loop
 
+    /// <summary>dev3 smooth look: only for a live, unpaused game with the menu/settings closed and
+    /// touch/gyro turning (keyboard/gamepad turning keeps the classic interpolation).</summary>
+    private bool SmoothLookActive()
+    {
+        if (!RekkrSettings.SmoothLook || !InLevel || settingsOpen || input.EditMode || input.LastTicKeyTurn) return false;
+        if (Doom.Menu.Active || Doom.Game.Paused || Doom.Game.World.AutoMap.Visible) return false;
+        var p = Doom.Game.World.ConsolePlayer;
+        return p.PlayerState == PlayerState.Live && p.Mobj != null;
+    }
+
     public bool InLevel => Doom != null && Doom.State == DoomState.Game && Doom.Game.State == GameState.Level;
     public bool CanContinue => canContinue;
 
@@ -253,7 +264,9 @@ public sealed partial class RekkrApp : MonoBehaviour
             if (tics == 6) ticAccum = 0;
             if (tics > 0) WatchGameplay();
             var frac = (float)(ticAccum / TicTime);
+            video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            if (testLoop) TrackViewAngle(frac);
         }
         catch (Exception e)
         {

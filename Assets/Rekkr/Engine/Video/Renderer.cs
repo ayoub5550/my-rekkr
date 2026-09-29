@@ -179,6 +179,12 @@ namespace ManagedDoom.Video
             screen.OffsetX = 0;
         }
 
+        /// <summary>my-rekkr dev3 "smooth look": turn (BAM) the player has input since the last tic.
+        /// When set, the 3D view uses the current tic angle + this offset instead of the interpolated
+        /// angle, so touch/gyro look is applied every rendered frame (the sim is unchanged). The app
+        /// sets it only for a live game (never for demos).</summary>
+        public Angle? LocalViewTurn;
+
         public void RenderGame(DoomGame game, Fixed frameFrac)
         {
             if (game.Paused)
@@ -199,7 +205,8 @@ namespace ManagedDoom.Video
                 }
                 else
                 {
-                    threeD.Render(displayPlayer, frameFrac);
+                    threeD.Render(displayPlayer, frameFrac,
+                        displayPlayer == consolePlayer && !game.Paused ? LocalViewTurn : null);
                     if (threeD.WindowSize < 8)
                     {
                         RenderStatusBar(consolePlayer);

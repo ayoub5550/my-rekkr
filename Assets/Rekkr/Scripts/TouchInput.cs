@@ -246,6 +246,9 @@ namespace ManagedDoom.UnityPort
                 if (RekkrSettings.GyroInvert) yaw = -yaw;
                 if (Mathf.Abs(yaw) > 0.02F) gyroRadians += yaw * Time.unscaledDeltaTime;
             }
+            // Autopilot turning is fed like a finger swipe (640 units per tic at AutoTurn = 1), so
+            // Test Lab runs exercise the same per-frame smooth-look path as a real player.
+            if (AutoTurn != 0) turnPixels -= AutoTurn * 640F * 35F * Time.unscaledDeltaTime / SwipeUnitsPerPixel;
             if (AutoFire) buttons[Ctl.Fire].Held = true;
             if (AutoUse) buttons[Ctl.Use].Held = true;
 
@@ -529,6 +532,25 @@ namespace ManagedDoom.UnityPort
 
         // ----------------------------------------------------------------- TicCmd
 
+        /// <summary>True if the last tic turned with keys/gamepad (then the renderer keeps the classic
+        /// interpolated angle, which is smooth for constant-rate turning).</summary>
+        public bool LastTicKeyTurn { get; private set; }
+
+        private float SwipeUnitsPerPixel => 32768F / (0.30F * Screen.width) * (RekkrSettings.LookSensitivity / 5F);
+        private static float GyroUnitsPerRadian => (65536F / (2F * Mathf.PI)) * (RekkrSettings.GyroSensitivity / 4F);
+
+        /// <summary>Turn (Doom BAM) input since the last tic that the next tic will apply — the same
+        /// arithmetic as BuildTicCmd, without consuming it. Used for per-frame "smooth look".</summary>
+        public Angle PendingTurn
+        {
+            get
+            {
+                var turn = -turnPixels * SwipeUnitsPerPixel + turnCarry + gyroRadians * GyroUnitsPerRadian;
+                var units = Mathf.Clamp(Mathf.RoundToInt(turn), -32000, 32000);
+                return new Angle((uint)(units << 16));
+            }
+        }
+
         public void BuildTicCmd(TicCmd cmd)
         {
             cmd.Clear();
@@ -553,11 +575,12 @@ namespace ManagedDoom.UnityPort
             side += Mathf.RoundToInt(kx * PlayerBehavior.SideMove[speed]);
             if (Input.GetKey(KeyCode.Q)) cmd.AngleTurn += (short)PlayerBehavior.AngleTurn[speed];
             if (Input.GetKey(KeyCode.E)) cmd.AngleTurn -= (short)PlayerBehavior.AngleTurn[speed];
+            LastTicKeyTurn = cmd.AngleTurn != 0;
 
             // Swipe to turn. Sensitivity 5 ≈ a 30%-of-screen swipe turns 180°.
             var sens = RekkrSettings.LookSensitivity;
             var perPixel = 32768F / (0.30F * Screen.width) * (sens / 5F);
-            var turn = -turnPixels * perPixel + turnCarry - AutoTurn * 640F;
+            var turn = -turnPixels * perPixel + turnCarry;
             turnPixels = 0;
             // Gyro: radians -> Doom angle units (65536 per turn) x sensitivity (4 = 1:1).
             turn += gyroRadians * (65536F / (2F * Mathf.PI)) * (RekkrSettings.GyroSensitivity / 4F);

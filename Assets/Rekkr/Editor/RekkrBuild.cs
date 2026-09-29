@@ -55,7 +55,7 @@ public static class RekkrBuild
         EditorUserBuildSettings.buildAppBundle = false;
 
         var code = Environment.GetEnvironmentVariable("REKKR_VERSION_CODE");
-        PlayerSettings.Android.bundleVersionCode = string.IsNullOrEmpty(code) ? 1 : int.Parse(code);
+        PlayerSettings.Android.bundleVersionCode = string.IsNullOrEmpty(code) ? int.Parse(RekkrApp.Version.Split('.')[1]) : int.Parse(code); // default: 0.N.x -> N
 
         var icon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Rekkr/Icon/icon.png");
         if (icon != null)
@@ -137,6 +137,10 @@ public static class RekkrBuild
             targetGroup = BuildTargetGroup.Standalone,
             options = BuildOptions.None,
         });
+        // Leave ProjectSettings as the release expects (runInBackground off on Android), so a desktop
+        // QA build never dirties the committed settings.
+        PlayerSettings.runInBackground = false;
+        AssetDatabase.SaveAssets();
         Finish(report, outPath);
     }
 

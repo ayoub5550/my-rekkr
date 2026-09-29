@@ -67,7 +67,7 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 |---|---|---|---|
 | 0 | Safety net: golden hashes, timing instrumentation, version bump | ✅ 2026-09-29 | `tools/HeadlessTest/golden.txt` = 176 frame hashes of the v0.2.0 renderer (wipe seed fixed via `WipeEffect.TestSeed`); summary line now has `render_ms_*`, `upload_ms_*`, `gc0`, `thermal`, `api`. Linux llvmpipe baseline 1066×400: render 4.14 ms avg / 5.70 p99, upload 0.43 ms, gc0=4 in scenario 1 |
 | 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | ✅ 2026-09-29 | 2 real bugs fixed (§6): **save crash on E1M7** (buffer overflow) and **see-through wall columns** in 4 textures; saves now atomic. All 36 maps: 2000-tic bot soak + byte-exact save→load→save round trip PASS. HOM scan at 1066/640 from 5744 thing positions per width: only vanilla 1–9 px sparkles + one E4M1 voodoo-machinery closet (not reachable). Golden unchanged. Lifecycle review items moved to stages 5/9/11 (see stage 1 spec) |
-| 2 | Per-frame look (touch + gyro at render rate) | ⬜ | |
+| 2 | Per-frame look (touch + gyro at render rate) | ✅ 2026-09-29 | `Renderer.LocalViewTurn` + `TouchInput.PendingTurn`; setting "Smooth look" (Controls tab, default on, EN/AR). Autopilot turning now feeds the swipe path. Linux A/B scenario 1: view lag avg **1.97° → 0.06°**, p99 **15.3° → 1.4°**. Golden unchanged (demos use the classic path). Device check in stage 11 (`look_*` fields) |
 | 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ⬜ | |
 | 4 | Multithreaded renderer (column strips) | ⬜ | |
 | 5 | Resolution levels 400/600/800/1000 + dynamic resolution | ⬜ | |
@@ -148,6 +148,9 @@ Deferred to dev4: _(none yet)_
 - Setting: `Smooth look` (on in both presets; it changes feel, not look).
 - Check: golden hashes unchanged (demo path untouched); Linux player with autopilot constant turn —
   log per-frame view angle deltas: must be monotonic and even (no 35 Hz steps); DEMO1–4 PASS.
+- Done as specified. Summary line fields: `smooth_look`, `look_step_deg`, `look_step_cv`,
+  `look_lag_deg_avg/p99`. Desktop A/B: `REKKR_SMOOTHLOOK=0`. `RekkrBuild.BuildLinux` now resets
+  `runInBackground` after the build, and versionCode defaults to the minor version (0.3.x → 3).
 
 ### Stage 3 — Frame pacing, Vulkan, sustained performance, zero-GC
 - `PlayerSettings.Android.optimizedFramePacing = true` (Swappy) and keep `targetFrameRate` = display

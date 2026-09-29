@@ -224,6 +224,7 @@ public sealed partial class RekkrApp
     private void DrawControlsTab()
     {
         RekkrSettings.LookSensitivity = Stepper(Loc.T("look_sens"), RekkrSettings.LookSensitivity, 1, 10, 1, "");
+        RekkrSettings.SmoothLook = Toggle(Loc.T("smooth_look"), RekkrSettings.SmoothLook);
         RekkrSettings.ControlsScale = Stepper(Loc.T("btn_size"), RekkrSettings.ControlsScale, 70, 140, 10, "%");
         RekkrSettings.ControlsOpacity = Stepper(Loc.T("btn_alpha"), RekkrSettings.ControlsOpacity, 30, 100, 10, "%");
         RekkrSettings.LeftHanded = Toggle(Loc.T("left"), RekkrSettings.LeftHanded);

@@ -195,6 +195,36 @@ public sealed partial class RekkrApp
 
     private int testGcStart = -1;
 
+    // dev3 smooth-look metrics while the autopilot turns: per-frame view-angle step (evenness) and
+    // lag = (angle the input asks for) - (angle actually rendered).
+    private readonly List<float> lookSteps = new List<float>(20000);
+    private readonly List<float> lookLags = new List<float>(20000);
+    private Angle lastViewAngle; private bool hasLastView;
+
+    private void TrackViewAngle(float frac)
+    {
+        if (!InLevel || input.AutoTurn == 0) { hasLastView = false; return; }
+        var p = Doom.Game.World.ConsolePlayer;
+        if (p.Mobj == null) return;
+        var rendered = video.LocalViewTurn.HasValue ? p.Mobj.Angle + video.LocalViewTurn.Value
+                                                    : p.GetInterpolatedAngle(Fixed.FromFloat(Mathf.Clamp01(frac)));
+        var wanted = p.Mobj.Angle + input.PendingTurn;
+        lookLags.Add(Mathf.Abs(DeltaDeg(wanted, rendered)));
+        if (hasLastView) lookSteps.Add(Mathf.Abs(DeltaDeg(rendered, lastViewAngle)));
+        lastViewAngle = rendered; hasLastView = true;
+    }
+
+    private static float DeltaDeg(Angle a, Angle b) => (float)((int)(a.Data - b.Data) * (180.0 / 2147483648.0));
+
+    private string LookSummary()
+    {
+        if (lookSteps.Count < 10) return "look=n/a";
+        float sum = 0, sq = 0; foreach (var v in lookSteps) { sum += v; sq += v * v; }
+        var mean = sum / lookSteps.Count; var sd = Mathf.Sqrt(Mathf.Max(0, sq / lookSteps.Count - mean * mean));
+        var (lagAvg, lagP99) = Stats(lookLags);
+        return $"smooth_look={RekkrSettings.SmoothLook} look_step_deg={mean:F3} look_step_cv={(mean > 0 ? sd / mean : 0):F2} look_lag_deg_avg={lagAvg:F2} look_lag_deg_p99={lagP99:F2}";
+    }
+
     private static (float avg, float p99) Stats(List<float> values)
     {
         if (values.Count == 0) return (0, 0);
@@ -237,7 +267,7 @@ public sealed partial class RekkrApp
         var (renderAvg, renderP99) = Stats(renderTimes);
         var (uploadAvg, uploadP99) = Stats(uploadTimes);
         var gc0 = GC.CollectionCount(0) - testGcStart;
-        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
+        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} {LookSummary()} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
         Debug.Log(summary);
         try
         {

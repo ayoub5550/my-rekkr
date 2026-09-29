@@ -28,6 +28,7 @@ namespace ManagedDoom.UnityPort
             ["gyro_sens"] = ("Gyro sensitivity", "حساسية الجيروسكوب"),
             ["gyro_inv"] = ("Invert gyro", "عكس اتجاه الجيروسكوب"),
             ["haptics"] = ("Vibration", "الاهتزاز"),
+            ["smooth_look"] = ("Smooth look (every frame)", "نظر سلس (كل إطار)"),
             ["haptics_hint"] = ("Short pulses when you attack and when you are hit.", "نبضة قصيرة عند الهجوم وعند تلقي الضرر."),
             ["gyro_hint"] = ("Turn the phone to aim. Works together with swipe.", "حرّك الهاتف للتصويب، ويعمل مع السحب معاً."),
             ["fps"] = ("Frame rate", "معدل الإطارات"),
