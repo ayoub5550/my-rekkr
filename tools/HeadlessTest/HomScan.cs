@@ -35,17 +35,17 @@ public static class HomScan
                     var map = world.Map;
                     var rng = new Random(e * 100 + m);
                     var points = new List<(Fixed x, Fixed y, string tag)> { (mo.X, mo.Y, "start") };
-                    var subs = map.Subsectors;
-                    for (int i = 0; i < SamplesPerMap; i++)
+                    // Sample where the designer put things (items, monsters, starts): places players really go.
+                    // Random subsector centres were tried first and mostly hit sealed/self-referencing
+                    // trick sectors (deep water, fake floors) that draw nothing in vanilla either.
+                    var things = map.Things.Where(t => t.Type != 14 && t.Type < 4000).ToArray();
+                    for (int i = 0; i < SamplesPerMap && things.Length > 0; i++)
                     {
-                        var ss = subs[rng.Next(subs.Length)];
-                        long sx = 0, sy = 0;
-                        for (int k = 0; k < ss.SegCount; k++) { var sg = map.Segs[ss.FirstSeg + k]; sx += sg.Vertex1.X.Data; sy += sg.Vertex1.Y.Data; }
-                        if (ss.SegCount == 0) continue;
-                        // The seg-vertex average can fall outside the subsector (partition edges have no segs).
-                        if (Geometry.PointInSubsector(new Fixed((int)(sx / ss.SegCount)), new Fixed((int)(sy / ss.SegCount)), map) != ss) continue;
-                        points.Add((new Fixed((int)(sx / ss.SegCount)), new Fixed((int)(sy / ss.SegCount)), $"ss{Array.IndexOf(subs, ss)}"));
+                        var t = things[rng.Next(things.Length)];
+                        points.Add((t.X, t.Y, $"thing{t.Type}"));
                     }
+                    var reach = Reachable(map, mo.Subsector.Sector);
+                    points.RemoveAll(pt => pt.tag != "start" && !reach.Contains(Geometry.PointInSubsector(pt.x, pt.y, map).Sector));
                     int mapBad = 0, mapWorst = 0;
                     foreach (var (px, py, tag) in points)
                     {
@@ -91,6 +91,29 @@ public static class HomScan
         File.WriteAllLines(Path.Combine(outDir, "hom_report.txt"), report);
         Console.WriteLine($"hom: maps={total} views={views} bad_views={bad} report={Path.Combine(outDir, "hom_report.txt")}");
         return bad == 0 ? 0 : 1;
+    }
+
+    // Sectors connected to the start (or to a teleport destination) through two-sided lines.
+    // Sealed dummy/void sectors are skipped: a view from inside them draws nothing by design.
+    private static HashSet<Sector> Reachable(ManagedDoom.Map map, Sector start)
+    {
+        var seen = new HashSet<Sector> { start };
+        var queue = new Queue<Sector>(); queue.Enqueue(start);
+        foreach (var t in map.Things)
+            if (t.Type == 14) { var s = Geometry.PointInSubsector(t.X, t.Y, map).Sector; if (seen.Add(s)) queue.Enqueue(s); }
+        var adj = new Dictionary<Sector, List<Sector>>();
+        foreach (var l in map.Lines)
+        {
+            if (l.BackSector == null) continue;
+            if (!adj.TryGetValue(l.FrontSector, out var a)) adj[l.FrontSector] = a = new List<Sector>(); a.Add(l.BackSector);
+            if (!adj.TryGetValue(l.BackSector, out var b)) adj[l.BackSector] = b = new List<Sector>(); b.Add(l.FrontSector);
+        }
+        while (queue.Count > 0)
+        {
+            var s = queue.Dequeue();
+            if (adj.TryGetValue(s, out var n)) foreach (var o in n) if (seen.Add(o)) queue.Enqueue(o);
+        }
+        return seen;
     }
 
     // Writes the frame with unwritten pixels in magenta.
@@ -156,5 +179,52 @@ public static class TexHoles
             Console.WriteLine($"texhole {tex[kv.Key].Name} {tex[kv.Key].Width}x{tex[kv.Key].Height} empty_columns={holes[kv.Key]} maps={string.Join(",", kv.Value)}");
         Console.WriteLine($"texholes: {holes.Count} textures with empty columns, {used.Count} used as solid walls in maps");
         return 0;
+    }
+}
+
+// Views every solid wall that uses a texture with empty columns, with the hole fill off and on.
+public static class HoleFix
+{
+    public static int Run(GameContent content, CommandLineArgs args, string outDir)
+    {
+        int before = 0, after = 0, walls = 0;
+        var c = new Config(); c.video_highresolution = true; c.video_gamescreensize = 8;
+        var v = new ShotVideo(c, content, 1066); v.DisplayMessage = false;
+        var d = new Doom(args, c, content, v, null, null, null);
+        foreach (var (e, m) in new[] { (1, 1), (1, 7) })
+        {
+            d.NewGame(GameSkill.Medium, e, m);
+            for (int t = 0; t < 140; t++) d.Update();
+            var world = d.Game.World; var map = world.Map; var mo = world.ConsolePlayer.Mobj;
+            foreach (var l in map.Lines)
+            {
+                if (l.BackSide != null) continue;
+                var tx = content.Textures[l.FrontSide.MiddleTexture];
+                if (tx.Composite.Columns.All(col => col.Length > 0)) continue;
+                // stand 96 units in front of the line centre (front side is to the right of v1->v2)
+                double x1 = l.Vertex1.X.ToDouble(), y1 = l.Vertex1.Y.ToDouble(), x2 = l.Vertex2.X.ToDouble(), y2 = l.Vertex2.Y.ToDouble();
+                double len = Math.Sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)); if (len < 32) continue;
+                double nx = (y2 - y1) / len, ny = -(x2 - x1) / len;
+                var px = Fixed.FromDouble((x1 + x2) / 2 + nx * 96); var py = Fixed.FromDouble((y1 + y2) / 2 + ny * 96);
+                world.ThingMovement.UnsetThingPosition(mo); mo.X = px; mo.Y = py; world.ThingMovement.SetThingPosition(mo);
+                if (mo.Subsector.Sector != l.FrontSector) continue;
+                mo.Z = mo.Subsector.Sector.FloorHeight; world.ConsolePlayer.ViewZ = mo.Z + Player.NormalViewHeight;
+                mo.Angle = new Angle((uint)(Math.Atan2(-ny, -nx) / (2 * Math.PI) * 4294967296.0));
+                walls++;
+                foreach (var fill in new[] { false, true })
+                {
+                    Texture.FillSolidHoles = fill;
+                    var data = v.Inner.ScreenDataForTest;
+                    Array.Fill(data, (byte)0); v.Frame(d, Fixed.One); var a = (byte[])data.Clone();
+                    Array.Fill(data, (byte)255); v.Frame(d, Fixed.One);
+                    int diff = 0; for (int i = 0; i < data.Length; i++) if (data[i] != a[i]) diff++;
+                    if (fill) after += diff; else before += diff;
+                    if (walls <= 2) v.Shot(d, Path.Combine(outDir, $"holefix_{tx.Name}_{(fill ? "on" : "off")}.png"));
+                }
+                Texture.FillSolidHoles = true;
+            }
+        }
+        Console.WriteLine($"holefix: walls={walls} unwritten_pixels off={before} on={after}");
+        return after == 0 || after < before / 20 ? 0 : 1;
     }
 }

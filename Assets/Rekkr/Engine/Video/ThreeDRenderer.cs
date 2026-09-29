@@ -1409,7 +1409,7 @@ namespace ManagedDoom.Video
                     angle = new Angle(angle.Data & 0x7FFFFFFF);
 
                     var textureColumn = (rwOffset - Trig.Tan(angle) * rwDistance).ToIntFloor();
-                    var source = wallTexture.Composite.Columns[textureColumn & wallWidthMask];
+                    var source = wallTexture.SolidColumns[textureColumn & wallWidthMask];
 
                     if (source.Length > 0)
                     {
@@ -1824,7 +1824,7 @@ namespace ManagedDoom.Video
 
                     var wy1 = Math.Max(drawUpperWallY1, upperClip[x] + 1);
                     var wy2 = Math.Min(drawUpperWallY2, lowerClip[x] - 1);
-                    var source = upperWallTexture.Composite.Columns[textureColumn & upperWallWidthMask];
+                    var source = upperWallTexture.SolidColumns[textureColumn & upperWallWidthMask];
                     if (source.Length > 0)
                     {
                         DrawColumn(source[0], wallLights[lightIndex], x, wy1, wy2, invScale, uperTextureAlt);
@@ -1856,7 +1856,7 @@ namespace ManagedDoom.Video
 
                     var wy1 = Math.Max(drawLowerWallY1, upperClip[x] + 1);
                     var wy2 = Math.Min(drawLowerWallY2, lowerClip[x] - 1);
-                    var source = lowerWallTexture.Composite.Columns[textureColumn & lowerWallWidthMask];
+                    var source = lowerWallTexture.SolidColumns[textureColumn & lowerWallWidthMask];
                     if (source.Length > 0)
                     {
                         DrawColumn(source[0], wallLights[lightIndex], x, wy1, wy2, invScale, lowerTextureAlt);

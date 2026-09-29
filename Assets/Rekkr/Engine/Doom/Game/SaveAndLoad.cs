@@ -104,6 +104,16 @@ namespace ManagedDoom
 
             public void Save(DoomGame game, string path)
             {
+                // my-rekkr dev3 fix: the fixed 360 KB buffer overflowed on REKKR's biggest maps
+                // (E1M7: IndexOutOfRangeException, so quick save / autosave failed there). Grow it
+                // from a generous per-object estimate before writing anything.
+                var world = game.World;
+                var thinkerCount = 0;
+                foreach (var _ in world.Thinkers) thinkerCount++;
+                var needed = 16384 + world.Map.Sectors.Length * 16 + world.Map.Lines.Length * 32
+                    + thinkerCount * 256 + Player.MaxPlayerCount * 1024;
+                if (needed > data.Length) Array.Resize(ref data, needed);
+
                 var options = game.World.Options;
                 data[ptr++] = (byte)options.Skill;
                 data[ptr++] = (byte)options.Episode;
@@ -124,10 +134,16 @@ namespace ManagedDoom
 
                 data[ptr++] = 0x1d;
 
-                using (var writer = new FileStream(path, FileMode.Create, FileAccess.Write))
+                // my-rekkr dev3: write to a temp file first, so an app kill during the write can
+                // never leave a truncated save (autosave runs when the app goes to background).
+                var tmp = path + ".tmp";
+                using (var writer = new FileStream(tmp, FileMode.Create, FileAccess.Write))
                 {
                     writer.Write(data, 0, ptr);
+                    writer.Flush(true);
                 }
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
             }
 
             private void PadPointer()

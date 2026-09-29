@@ -197,5 +197,34 @@ namespace ManagedDoom
         public int Height => height;
         public IReadOnlyList<TexturePatch> Patches => patches;
         public Patch Composite => composite;
+
+        // my-rekkr dev3: columns for SOLID walls (one-sided middles, uppers, lowers). A few REKKR
+        // textures (DVMIDBLD, BLODGR1, DVPNT1/2) have columns that no patch covers; drawn as solid
+        // walls those columns were left unwritten (hall-of-mirrors smear). Here an empty column
+        // borrows the nearest covered column, so the wall is closed. Masked middles keep the empty
+        // columns (see-through, as designed). Textures without holes return the composite itself.
+        private Column[][] solidColumns;
+        public Column[][] SolidColumns => FillSolidHoles ? (solidColumns ??= BuildSolidColumns(composite.Columns)) : composite.Columns;
+        public static bool FillSolidHoles = true;   // tests toggle it to measure the fix
+
+        private static Column[][] BuildSolidColumns(Column[][] cols)
+        {
+            var hasHole = false; var hasData = false;
+            foreach (var c in cols) { if (c.Length == 0) hasHole = true; else hasData = true; }
+            if (!hasHole || !hasData) return cols;
+            var result = new Column[cols.Length][];
+            for (var x = 0; x < cols.Length; x++)
+            {
+                if (cols[x].Length > 0) { result[x] = cols[x]; continue; }
+                for (var d = 1; d < cols.Length; d++)
+                {
+                    var l = cols[((x - d) % cols.Length + cols.Length) % cols.Length];
+                    if (l.Length > 0) { result[x] = l; break; }
+                    var r = cols[(x + d) % cols.Length];
+                    if (r.Length > 0) { result[x] = r; break; }
+                }
+            }
+            return result;
+        }
     }
 }

@@ -1,5 +1,8 @@
 // Headless checks for the REKKR engine core (no Unity needed).
-// Usage: dotnet run -- <rekkr.wad> <outdir>
+// Usage: dotnet run -- <rekkr.wad> <outdir> [mode]
+//   modes: all (default: load, demos, all maps, renders, saves, soak + save round trip, golden check)
+//          golden-write|golden-check [golden.txt], hom [widths e.g. 1066,640], texholes, holefix,
+//          secinfo <episode> <map> <x> <y> <radius>   (lists lines/textures near a point, for triage)
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -20,6 +23,18 @@ public static class Program
         int failures = 0;
         var mode = argv.Length > 2 ? argv[2] : "all";
         var goldenPath = argv.Length > 3 ? argv[3] : Path.Combine(AppContext.BaseDirectory, "../../../golden.txt");
+        if (mode == "secinfo")
+        {
+            var sa = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            var sc = new GameContent(sa);
+            SecInfo.Run(sc, int.Parse(argv[3]), int.Parse(argv[4]), int.Parse(argv[5]), int.Parse(argv[6]), int.Parse(argv[7]));
+            return 0;
+        }
+        if (mode == "holefix")
+        {
+            var ha = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return HoleFix.Run(new GameContent(ha), ha, outDir);
+        }
         if (mode == "texholes")
         {
             var targs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
@@ -128,6 +143,42 @@ public static class Program
             if (!ok) failures++;
         }
 
+        // 8. dev3 stage 1: every map — 2000-tic random-bot soak, then save -> load -> replay the same
+        //    200 tic commands on the original and on the loaded game: world state must be identical.
+        for (int e = 1; e <= 4; e++)
+            for (int m = 1; m <= 9; m++)
+            {
+                try
+                {
+                    var o = new GameOptions(); o.Skill = GameSkill.Hard; o.Episode = e; o.Map = m; o.Players[0].InGame = true;
+                    var g = new DoomGame(content, o); g.DeferedInitNew();
+                    var bot = new Random(e * 10 + m);
+                    var cmds = Enumerable.Range(0, Player.MaxPlayerCount).Select(i => new TicCmd()).ToArray();
+                    int t = 0;
+                    for (; t < 2000 && g.State == GameState.Level; t++) { Bot(bot, cmds[0]); g.Update(cmds); }
+                    if (g.State != GameState.Level || g.World.ConsolePlayer.Health <= 0)
+                    {
+                        // died or finished the level: restart the map for the save/load part
+                        g = new DoomGame(content, o); g.DeferedInitNew();
+                        for (int k = 0; k < 300; k++) { Bot(bot, cmds[0]); g.Update(cmds); }
+                    }
+                    var path = Path.Combine(ConfigUtilities.GetExeDirectory(), "doomsav7.dsg");
+                    SaveAndLoad.Save(g, "TEST", path);
+                    // Round trip: load the save into a fresh game (no tic in between) and save again;
+                    // both files must be byte-identical (vanilla format, the RNG index is not stored).
+                    var loaded = new DoomGame(content, o); loaded.DeferedInitNew(); loaded.Update(cmds);
+                    SaveAndLoad.Load(loaded, path);
+                    var path2 = Path.Combine(ConfigUtilities.GetExeDirectory(), "doomsav6.dsg");
+                    SaveAndLoad.Save(loaded, "TEST", path2);
+                    var f1 = File.ReadAllBytes(path); var f2 = File.ReadAllBytes(path2);
+                    var ok = f1.AsSpan().SequenceEqual(f2) && WorldHash(g) == WorldHash(loaded);
+                    var h1 = $"{f1.Length}B"; var h2 = $"{f2.Length}B {WorldHash(g)} vs {WorldHash(loaded)}";
+                    Console.WriteLine($"soak+saveload E{e}M{m}: tics={t} health={g.World.ConsolePlayer.Health} save={h1} {(ok ? "ok" : $"FAIL {h1} != {h2}")}");
+                    if (!ok) failures++;
+                }
+                catch (Exception ex) { Console.WriteLine($"soak+saveload E{e}M{m}: FAIL {ex}"); failures++; }
+            }
+
         // 7. Classic renderer must stay pixel-identical to v0.2.0 (dev3 safety net).
         if (File.Exists(Path.GetFullPath(goldenPath)))
         {
@@ -137,6 +188,28 @@ public static class Program
 
         Console.WriteLine(failures == 0 ? "RESULT PASS" : $"RESULT FAIL {failures}");
         return failures == 0 ? 0 : 1;
+    }
+
+    static void Bot(Random r, TicCmd c)
+    {
+        c.Clear();
+        c.ForwardMove = (sbyte)r.Next(-50, 51);
+        c.SideMove = (sbyte)r.Next(-40, 41);
+        c.AngleTurn = (short)(r.Next(-1200, 1201));
+        byte b = 0;
+        if (r.Next(4) == 0) b |= TicCmdButtons.Attack;
+        if (r.Next(12) == 0) b |= TicCmdButtons.Use;
+        c.Buttons = b;
+    }
+
+    static string WorldHash(DoomGame g)
+    {
+        long h = 17;
+        foreach (var th in g.World.Thinkers)
+            if (th is Mobj mo) h = h * 31 + mo.X.Data * 7 + mo.Y.Data * 13 + mo.Z.Data + mo.Health * 101 + (int)mo.Angle.Data;
+        var p = g.World.ConsolePlayer;
+        h = h * 31 + p.Health + p.KillCount * 1000 + g.World.LevelTime;
+        return h.ToString("x");
     }
 }
 

@@ -66,7 +66,7 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 | # | Stage | Status | Notes / measured |
 |---|---|---|---|
 | 0 | Safety net: golden hashes, timing instrumentation, version bump | ✅ 2026-09-29 | `tools/HeadlessTest/golden.txt` = 176 frame hashes of the v0.2.0 renderer (wipe seed fixed via `WipeEffect.TestSeed`); summary line now has `render_ms_*`, `upload_ms_*`, `gc0`, `thermal`, `api`. Linux llvmpipe baseline 1066×400: render 4.14 ms avg / 5.70 p99, upload 0.43 ms, gc0=4 in scenario 1 |
-| 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | 🚧 | Tools done: `hom` and `texholes` modes (see §5). First results in §6. Next: triage the big HOM hits (view the PNGs), fix real ones, then soak + save/load-all-maps, lifecycle review |
+| 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | ✅ 2026-09-29 | 2 real bugs fixed (§6): **save crash on E1M7** (buffer overflow) and **see-through wall columns** in 4 textures; saves now atomic. All 36 maps: 2000-tic bot soak + byte-exact save→load→save round trip PASS. HOM scan at 1066/640 from 5744 thing positions per width: only vanilla 1–9 px sparkles + one E4M1 voodoo-machinery closet (not reachable). Golden unchanged. Lifecycle review items moved to stages 5/9/11 (see stage 1 spec) |
 | 2 | Per-frame look (touch + gyro at render rate) | ⬜ | |
 | 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ⬜ | |
 | 4 | Multithreaded renderer (column strips) | ⬜ | |
@@ -121,6 +121,15 @@ Deferred to dev4: _(none yet)_
    automap line thickness at higher resolutions (1 px lines get thin at 800 lines → draw `scale/2`
    px thick).
 - Every real bug found gets a row in §6 (bug log) with its fix commit.
+- Result notes (2026-09-29): sampling random subsector centres gave many false positives (sealed
+  dummy sectors, self-referencing "deep water"/fake-floor tricks, voodoo/conveyor closets — they
+  draw nothing in vanilla too). The scan therefore samples **map thing positions** (where the
+  designer put items/monsters) restricted to sectors connected to the start. 1–9 px specks at wall
+  seams are vanilla fixed-point "sparkles", identical at 640 (original engine path) — kept in
+  Classic; re-check at high resolution in stage 5.
+- Still to do in later stages (not automated here): automap line thickness at 600+ lines (stage 5);
+  notch/safe-area + Arabic rows (stage 9); pause/resume audio and back button in every state
+  (stage 11 device run + code review).
 
 ### Stage 2 — Per-frame look (biggest "feel" improvement)
 - Problem: touch swipe and gyro only change the view when a tic is built (35 Hz), and the renderer
@@ -307,8 +316,9 @@ dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht texholes
 
 | Found in | Bug | Fix |
 |---|---|---|
-| stage 1 scan | 4 wall textures used as **solid** walls have columns with no patch (drawn as nothing = HOM): `DVMIDBLD` (E1M1), `BLODGR1`, `DVPNT1`, `DVPNT2` (E1M7). Many more wall parts use "-" where the heights need a texture (e.g. E4M1 571, E1M7 405) — mostly intentional vanilla tricks; only visible gaps matter | open — decide fill strategy (repeat nearest column vs. keep vanilla) after viewing |
-| stage 1 scan | HOM scan at 1066×400 (6808 standable views): 168 views with unwritten pixels; most are 1–3 px specks at wall edges, a few large (E1M1, E1M6, E3M5, E4M7, E4M8 full-frame — likely views from sealed/void sectors, to triage) | open |
+| stage 1 soak | **Saving crashed on E1M7** (and could on other big maps): `SaveAndLoad` used a fixed 360 KB buffer, E1M7 needs 418 KB → `IndexOutOfRangeException`. Quick save/autosave silently failed there; a save from the Doom menu threw inside the tic loop (game stopped). | Buffer sized from sectors/lines/thinkers before writing; save written to `.tmp` then renamed (no truncated saves on app kill) |
+| stage 1 scan | 4 textures used as **solid** walls have columns no patch covers (`DVMIDBLD` E1M1, `BLODGR1`/`DVPNT1`/`DVPNT2` E1M7) → those columns were never drawn (HOM smear) | `Texture.SolidColumns`: empty columns borrow the nearest covered column for solid walls only (masked middles stay see-through). `holefix` test: 728 → 0 unwritten px. Golden unchanged |
+| stage 1 scan | Many wall parts use "-" where heights need a texture (E4M1 571, E1M7 405, …) | Not a bug: vanilla tricks (flat bleeding/deep water); left as in the original |
 
 ## 7. Log of decisions
 
