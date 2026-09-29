@@ -50,8 +50,17 @@ public static class RekkrBuild
         PlayerSettings.Android.startInFullscreen = true;
         PlayerSettings.Android.preferredInstallLocation = AndroidPreferredInstallLocation.Auto;
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
-        PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3 });
+        // dev3 stage 3: REKKR_GFX_API=vulkan ships Vulkan first with a GLES3 fallback (Unity picks the
+        // first supported API at start; no runtime switch in 2022.3). Default stays GLES3 until the
+        // Test Lab benchmark (scenario 3) shows Vulkan is better on r8q — see docs/DEV3.md stage 3.
+        var api = Environment.GetEnvironmentVariable("REKKR_GFX_API");
+        PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, api == "vulkan"
+            ? new[] { UnityEngine.Rendering.GraphicsDeviceType.Vulkan, UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3 }
+            : new[] { UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3 });
         PlayerSettings.SetMobileMTRendering(BuildTargetGroup.Android, true);
+        // Swappy frame pacing (even frame times at 60/90/120 Hz). REKKR_FRAMEPACING=0 disables it.
+        PlayerSettings.Android.optimizedFramePacing = Environment.GetEnvironmentVariable("REKKR_FRAMEPACING") != "0";
+        PlayerSettings.gcIncremental = true;
         EditorUserBuildSettings.buildAppBundle = false;
 
         var code = Environment.GetEnvironmentVariable("REKKR_VERSION_CODE");

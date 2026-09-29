@@ -67,8 +67,8 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 |---|---|---|---|
 | 0 | Safety net: golden hashes, timing instrumentation, version bump | ✅ 2026-09-29 | `tools/HeadlessTest/golden.txt` = 176 frame hashes of the v0.2.0 renderer (wipe seed fixed via `WipeEffect.TestSeed`); summary line now has `render_ms_*`, `upload_ms_*`, `gc0`, `thermal`, `api`. Linux llvmpipe baseline 1066×400: render 4.14 ms avg / 5.70 p99, upload 0.43 ms, gc0=4 in scenario 1 |
 | 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | ✅ 2026-09-29 | 2 real bugs fixed (§6): **save crash on E1M7** (buffer overflow) and **see-through wall columns** in 4 textures; saves now atomic. All 36 maps: 2000-tic bot soak + byte-exact save→load→save round trip PASS. HOM scan at 1066/640 from 5744 thing positions per width: only vanilla 1–9 px sparkles + one E4M1 voodoo-machinery closet (not reachable). Golden unchanged. Lifecycle review items moved to stages 5/9/11 (see stage 1 spec) |
-| 2 | Per-frame look (touch + gyro at render rate) | ✅ 2026-09-29 | `Renderer.LocalViewTurn` + `TouchInput.PendingTurn`; setting "Smooth look" (Controls tab, default on, EN/AR). Autopilot turning now feeds the swipe path. Linux A/B scenario 1: view lag avg **1.97° → 0.06°**, p99 **15.3° → 1.4°**. Golden unchanged (demos use the classic path). Device check in stage 11 (`look_*` fields) |
-| 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ⬜ | |
+| 2 | Per-frame look (touch + gyro at render rate) | ✅ 2026-09-29 | `Renderer.LocalViewTurn` + `TouchInput.PendingTurn`; setting "Smooth look" (Gyro & Vibration tab — Controls tab is full, default on, EN/AR). Autopilot turning now feeds the swipe path. Linux A/B scenario 1: view lag avg **1.97° → 0.06°**, p99 **15.3° → 1.4°**. Golden unchanged (demos use the classic path). Device check in stage 11 (`look_*` fields) |
+| 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ✅ 2026-09-29 (device numbers in stage 11) | Zero-copy: renderer writes straight into `GetRawTextureData` → upload CPU **0.54 → 0.01 ms** (Linux). Swappy `optimizedFramePacing` on (`REKKR_FRAMEPACING=0` to disable). `REKKR_GFX_API=vulkan` builds Vulkan+GLES3; default stays GLES3 until the stage 11 A/B on r8q. `PerfMode.SetSustained` + setting `StablePerf` (UI in stage 9, default off). Per-frame string allocations removed (FPS label, Arabic icon keys); `gc0` still 4 per ~2.5 min scenario (IMGUI internals) — incremental GC on, acceptable |
 | 4 | Multithreaded renderer (column strips) | ⬜ | |
 | 5 | Resolution levels 400/600/800/1000 + dynamic resolution | ⬜ | |
 | 6 | True-colour smooth lighting | ⬜ | |
@@ -170,6 +170,8 @@ Deferred to dev4: _(none yet)_
 - Zero-GC frame: no per-frame allocations in `Update`/`OnGUI` (cache strings like the FPS label, avoid
   LINQ/closures/boxing, reuse `GUIContent`). Enable incremental GC (`PlayerSettings.gcIncremental`).
   Target: `gc0` delta = 0 during 60 s of gameplay.
+- Runtime API switch via the `unity` intent extra was **not** implemented (unverifiable in the
+  sandbox); decide the default API from the stage 11 A/B instead.
 - Check audio thread: MeltySynth with the 32 MB GeneralUser GS must not cause frame spikes (measure
   render p99 with music HQ on/off).
 
@@ -265,6 +267,9 @@ Deferred to dev4: _(none yet)_
 - Option "Side fill: Black / Blur" (Blur in Enhanced).
 
 ### Stage 9 — Graphics tab, presets, first-run auto preset
+- Layout limit: the settings panel fits **6 rows per tab** (rowH = 0.093·H from 0.25·H; the DONE
+  button starts at 0.835·H). The Graphics tab has more rows → split it into two pages
+  ("Graphics 1/2" with ◀ ▶) or add a scroll view. Smooth look already lives in Gyro & Vibration.
 - New 4th settings tab **Graphics** (`tab_graphics`), all strings in `Loc.cs` EN + AR (use the
   existing `ArabicShaper`). Settings in `RekkrSettings` (PlayerPrefs keys `gfx_*`):
   Preset (Classic / Balanced / Enhanced / Custom), Resolution (Auto, 400, 600, 800, 1000),

@@ -46,6 +46,9 @@ namespace ManagedDoom.UnityPort
             return true;
         }
 
+        /// <summary>dev3: render directly into the texture memory (default). False = v0.2.0 path.</summary>
+        public static bool ZeroCopy = true;
+
         public Texture2D Texture => texture;
         public int FrameWidth => renderer.Width;
         public int FrameHeight => renderer.Height;
@@ -64,9 +67,24 @@ namespace ManagedDoom.UnityPort
         public void Render(Doom doom, Fixed frameFrac)
         {
             watch.Restart();
-            renderer.Render(doom, frame, frameFrac);
-            var t1 = watch.ElapsedTicks;
-            texture.SetPixelData(frame, 0);
+            long t1;
+            if (ZeroCopy)
+            {
+                // dev3: render straight into the texture's CPU memory (saves a full-frame copy).
+                var raw = texture.GetRawTextureData<byte>();
+                unsafe
+                {
+                    var span = new Span<byte>(Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafePtr(raw), raw.Length);
+                    renderer.Render(doom, span, frameFrac);
+                }
+                t1 = watch.ElapsedTicks;
+            }
+            else
+            {
+                renderer.Render(doom, frame, frameFrac);
+                t1 = watch.ElapsedTicks;
+                texture.SetPixelData(frame, 0);
+            }
             texture.Apply(false, false);
             var t2 = watch.ElapsedTicks;
             var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;

@@ -89,17 +89,27 @@ public sealed partial class RekkrApp
                 var r = new Rect(W * 0.5F - H * 0.09F, H * 0.01F, H * 0.18F, H * 0.05F);
                 GUI.DrawTexture(r, texWhite);
                 GUI.color = Color.white;
-                GUI.Label(r, Mathf.RoundToInt(fpsValue) + " FPS", smallStyle);
+                var fpsInt = Mathf.RoundToInt(fpsValue);
+                if (fpsInt != fpsShown) { fpsShown = fpsInt; fpsLabel = fpsInt + " FPS"; }
+                GUI.Label(r, fpsLabel, smallStyle);
             }
         }
         if (input.EditMode) DrawEditor();
         else if (settingsOpen) DrawSettings();
     }
 
+    private readonly System.Collections.Generic.Dictionary<string, string> arIconKeys = new System.Collections.Generic.Dictionary<string, string>();
+    private int fpsShown = -1; private string fpsLabel = "";
+
     private Texture2D Icon(string name)
     {
         if (name == null) return null;
-        if (Loc.Arabic && icons.TryGetValue(name + "_ar", out var ar) && ar != null) return ar;
+        if (Loc.Arabic)
+        {
+            // dev3 zero-GC: cache the "_ar" key instead of concatenating every frame.
+            if (!arIconKeys.TryGetValue(name, out var key)) arIconKeys[name] = key = name + "_ar";
+            if (icons.TryGetValue(key, out var ar) && ar != null) return ar;
+        }
         return icons.TryGetValue(name, out var t) ? t : null;
     }
 
@@ -224,7 +234,6 @@ public sealed partial class RekkrApp
     private void DrawControlsTab()
     {
         RekkrSettings.LookSensitivity = Stepper(Loc.T("look_sens"), RekkrSettings.LookSensitivity, 1, 10, 1, "");
-        RekkrSettings.SmoothLook = Toggle(Loc.T("smooth_look"), RekkrSettings.SmoothLook);
         RekkrSettings.ControlsScale = Stepper(Loc.T("btn_size"), RekkrSettings.ControlsScale, 70, 140, 10, "%");
         RekkrSettings.ControlsOpacity = Stepper(Loc.T("btn_alpha"), RekkrSettings.ControlsOpacity, 30, 100, 10, "%");
         RekkrSettings.LeftHanded = Toggle(Loc.T("left"), RekkrSettings.LeftHanded);
@@ -251,6 +260,8 @@ public sealed partial class RekkrApp
             if (hap) Haptics.Pulse(40, 200, 0);
         }
         Hint(Loc.T("haptics_hint"));
+        // dev3: in this tab because the Controls tab is full (7 rows would overlap DONE).
+        RekkrSettings.SmoothLook = Toggle(Loc.T("smooth_look"), RekkrSettings.SmoothLook);
     }
 
     private void DrawDisplayTab()

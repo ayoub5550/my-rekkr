@@ -87,6 +87,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         cam.orthographic = true;
 
         RekkrSettings.Load();
+        if (RekkrSettings.StablePerf) PerfMode.SetSustained(true);
         Loc.Arabic = RekkrSettings.Arabic;
         status = Loc.T("loading");
         Haptics.Init();
