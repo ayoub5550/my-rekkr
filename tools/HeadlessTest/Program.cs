@@ -18,6 +18,24 @@ public static class Program
         Directory.CreateDirectory(outDir);
         ConfigUtilities.DataDirectory = Path.GetFullPath(outDir);
         int failures = 0;
+        var mode = argv.Length > 2 ? argv[2] : "all";
+        var goldenPath = argv.Length > 3 ? argv[3] : Path.Combine(AppContext.BaseDirectory, "../../../golden.txt");
+        if (mode == "texholes")
+        {
+            var targs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return TexHoles.Run(new GameContent(targs), targs);
+        }
+        if (mode == "hom")
+        {
+            var hargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            var widths = argv.Length > 3 ? argv[3].Split(',').Select(int.Parse).ToArray() : new[] { 1066, 640 };
+            return HomScan.Run(new GameContent(hargs), hargs, widths, outDir);
+        }
+        if (mode == "golden-write" || mode == "golden-check")
+        {
+            var gargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return Golden.Run(new GameContent(gargs), gargs, Path.GetFullPath(goldenPath), mode == "golden-write");
+        }
 
         // 1. Full content load (textures, flats, sprites, DeHackEd).
         var args = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
@@ -110,8 +128,77 @@ public static class Program
             if (!ok) failures++;
         }
 
+        // 7. Classic renderer must stay pixel-identical to v0.2.0 (dev3 safety net).
+        if (File.Exists(Path.GetFullPath(goldenPath)))
+        {
+            if (Golden.Run(content, args, Path.GetFullPath(goldenPath), false) != 0) failures++;
+        }
+        else Console.WriteLine("golden: no golden.txt (skipped)");
+
         Console.WriteLine(failures == 0 ? "RESULT PASS" : $"RESULT FAIL {failures}");
         return failures == 0 ? 0 : 1;
+    }
+}
+
+/// <summary>dev3 safety net: SHA-256 of fixed rendered frames (attract loop with the demos, and each
+/// episode start with several HUD sizes, widescreen and 4:3, interpolated and not). The Classic
+/// renderer must reproduce tools/HeadlessTest/golden.txt exactly after every dev3 stage.</summary>
+public static class Golden
+{
+    public static int Run(GameContent content, CommandLineArgs args, string path, bool write)
+    {
+        var lines = new System.Collections.Generic.List<string>();
+        WipeEffect.TestSeed = 1234;
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        string H(byte[] b) => Convert.ToHexString(sha.ComputeHash(b)).ToLowerInvariant().Substring(0, 16);
+        foreach (var wide in new[] { 1066, 640 })
+        {
+            var c = new Config(); c.video_highresolution = true;
+            var v = new ShotVideo(c, content, wide);
+            var d = new Doom(args, c, content, v, null, null, null);
+            for (int t = 0; t < 35 * 150; t++)
+            {
+                d.Update();
+                if (t % 105 == 50) lines.Add($"attract w={wide} t={t} {H(v.Frame(d, Fixed.One))}");
+                if (t % 525 == 300) lines.Add($"attract w={wide} t={t} frac=0.5 {H(v.Frame(d, Fixed.One / 2))}");
+            }
+            for (int e = 1; e <= 4; e++)
+            {
+                var gc = new Config(); gc.video_highresolution = true; gc.video_gamescreensize = 7;
+                var gv = new ShotVideo(gc, content, wide);
+                var gd = new Doom(args, gc, content, gv, null, null, null);
+                gd.NewGame(GameSkill.Medium, e, 1);
+                for (int t = 0; t < 140; t++) gd.Update();
+                foreach (var size in new[] { 7, 9, 8, 5 })
+                {
+                    gv.WindowSize = size;
+                    lines.Add($"E{e}M1 w={wide} size={size} {H(gv.Frame(gd, Fixed.One))}");
+                }
+                gv.WindowSize = 7;
+                lines.Add($"E{e}M1 w={wide} frac=0.25 {H(gv.Frame(gd, Fixed.One / 4))}");
+                gd.Game.World.AutoMap.Open();
+                lines.Add($"E{e}M1 w={wide} automap {H(gv.Frame(gd, Fixed.One))}");
+                gd.Game.World.AutoMap.Close();
+                gd.Menu.Open();
+                lines.Add($"E{e}M1 w={wide} menu {H(gv.Frame(gd, Fixed.One))}");
+                gd.Menu.Close();
+            }
+        }
+        if (write)
+        {
+            File.WriteAllLines(path, new[] { "# dev3 golden frame hashes (v0.2.0 Classic renderer). Regenerate ONLY if the Classic look is meant to change." }.Concat(lines));
+            Console.WriteLine($"golden: wrote {lines.Count} hashes to {path}");
+            return 0;
+        }
+        var want = File.ReadAllLines(path).Where(l => !l.StartsWith("#")).ToArray();
+        int bad = 0;
+        for (int i = 0; i < Math.Max(want.Length, lines.Count); i++)
+        {
+            var w = i < want.Length ? want[i] : "(missing)"; var g = i < lines.Count ? lines[i] : "(missing)";
+            if (w != g) { bad++; if (bad <= 10) Console.WriteLine($"golden MISMATCH: want [{w}] got [{g}]"); }
+        }
+        Console.WriteLine(bad == 0 ? $"golden: {lines.Count} frames identical ok" : $"golden: FAIL {bad}/{lines.Count} frames differ");
+        return bad == 0 ? 0 : 1;
     }
 }
 
@@ -121,6 +208,8 @@ public sealed class ShotVideo : IVideo
     public ShotVideo(Config c, GameContent content, int wide = 0) { r = new Renderer(c, content, wide); buf = new byte[4 * r.Width * r.Height]; }
     public int W => r.Width; public int H => r.Height;
     public void Render(Doom doom, Fixed frameFrac) { r.Render(doom, buf, frameFrac); }
+    public byte[] Frame(Doom doom, Fixed frac) { r.Render(doom, buf, frac); return buf; }
+    public Renderer Inner => r;
     public void Shot(Doom doom, string path)
     {
         r.Render(doom, buf, Fixed.One);

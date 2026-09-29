@@ -25,11 +25,14 @@ namespace ManagedDoom.Video
         private int height;
         private DoomRandom random;
 
+        /// <summary>my-rekkr: tests set a fixed seed so rendered frames are reproducible (golden hashes).</summary>
+        public static int? TestSeed;
+
         public WipeEffect(int width, int height)
         {
             y = new short[width];
             this.height = height;
-            random = new DoomRandom(DateTime.Now.Millisecond);
+            random = new DoomRandom(TestSeed ?? DateTime.Now.Millisecond);
         }
 
         public void Start()

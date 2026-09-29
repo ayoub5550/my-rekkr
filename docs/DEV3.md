@@ -65,8 +65,8 @@ Owner approved this plan on 2026-09-29 («نعم موافق على خطتك»). 
 
 | # | Stage | Status | Notes / measured |
 |---|---|---|---|
-| 0 | Safety net: golden hashes, timing instrumentation, version bump | ⬜ | |
-| 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | ⬜ | |
+| 0 | Safety net: golden hashes, timing instrumentation, version bump | ✅ 2026-09-29 | `tools/HeadlessTest/golden.txt` = 176 frame hashes of the v0.2.0 renderer (wipe seed fixed via `WipeEffect.TestSeed`); summary line now has `render_ms_*`, `upload_ms_*`, `gc0`, `thermal`, `api`. Linux llvmpipe baseline 1066×400: render 4.14 ms avg / 5.70 p99, upload 0.43 ms, gc0=4 in scenario 1 |
+| 1 | Automatic bug hunt: HOM scan, all-maps soak, save/load all maps, fixes | 🚧 | Tools done: `hom` and `texholes` modes (see §5). First results in §6. Next: triage the big HOM hits (view the PNGs), fix real ones, then soak + save/load-all-maps, lifecycle review |
 | 2 | Per-frame look (touch + gyro at render rate) | ⬜ | |
 | 3 | Frame pacing, Vulkan, sustained performance, zero-GC frame | ⬜ | |
 | 4 | Multithreaded renderer (column strips) | ⬜ | |
@@ -87,11 +87,13 @@ Deferred to dev4: _(none yet)_
 ### Stage 0 — Safety net
 - Bump version: `RekkrApp.Version = "0.3.0"` (RekkrBuild uses it for versionName), build with
   `REKKR_VERSION_CODE=3`.
-- **Golden hashes** (before touching the renderer): extend HeadlessTest with a `golden` mode that
-  renders fixed frames — DEMO1–4 at tics 100/500/1000/2000 and each E?M1 start view — at 1066×400
-  and 640×400, `frameFrac = 1`, and writes `sha256` of the palette-index buffer **and** of the RGBA
-  output to `tools/HeadlessTest/golden.txt` (committed). A `check` mode compares; Classic must match
-  after every later stage. Generate it from the current code (= v0.2.0 renderer).
+- **Golden hashes** (done): HeadlessTest modes `golden-write` / `golden-check` render fixed frames —
+  the attract loop with all 4 demos every 105 tics (+ interpolated frac 0.5 frames), and each E?M1
+  start with HUD sizes 7/9/8/5, frac 0.25, automap and menu — at 1066×400 and 640×400, and store the
+  SHA-256 (16 hex) of the RGBA output in `tools/HeadlessTest/golden.txt`. The normal full run checks
+  it automatically. The wipe RNG was time-seeded, so tests set `WipeEffect.TestSeed`. Regenerate
+  golden **only** when the Classic look is intentionally changed (e.g. a real bug fix) and note it
+  in §7.
 - **Timing instrumentation**: in `RekkrApp.Update` measure with `Stopwatch` the CPU time of
   `video.Render` (render_ms), of the upload (upload_ms), and GC count delta. Add to the
   `[REKKR-TEST]` summary: `render_ms_avg`, `render_ms_p99`, `upload_ms_avg`, `gc0`, and the thermal
@@ -293,8 +295,9 @@ Deferred to dev4: _(none yet)_
 
 ```sh
 cd tools/HeadlessTest && dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht   # all PASS
-dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht golden-check           # from stage 0
-dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht hom                    # from stage 1
+dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht golden-check "$PWD/golden.txt"
+dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht hom 1066,640        # HOM scan, PNGs + hom_report.txt
+dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht texholes              # textures with empty columns on solid walls
 ```
 - Linux player QA under Xvfb (AGENTS §5): scenario 1 and 2 screenshots, no exceptions in the log.
   llvmpipe fps is not a performance number.
@@ -304,7 +307,8 @@ dotnet run -c Release -- ../../Assets/StreamingAssets/rekkr.wad /tmp/ht hom     
 
 | Found in | Bug | Fix |
 |---|---|---|
-| | _(none yet)_ | |
+| stage 1 scan | 4 wall textures used as **solid** walls have columns with no patch (drawn as nothing = HOM): `DVMIDBLD` (E1M1), `BLODGR1`, `DVPNT1`, `DVPNT2` (E1M7). Many more wall parts use "-" where the heights need a texture (e.g. E4M1 571, E1M7 405) — mostly intentional vanilla tricks; only visible gaps matter | open — decide fill strategy (repeat nearest column vs. keep vanilla) after viewing |
+| stage 1 scan | HOM scan at 1066×400 (6808 standable views): 168 views with unwritten pixels; most are 1–3 px specks at wall edges, a few large (E1M1, E1M6, E3M5, E4M7, E4M8 full-frame — likely views from sealed/void sectors, to triage) | open |
 
 ## 7. Log of decisions
 

@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using ManagedDoom;
 using ManagedDoom.UnityPort;
@@ -49,6 +50,7 @@ public sealed partial class RekkrApp
 
     private IEnumerator Autopilot()
     {
+        testGcStart = GC.CollectionCount(0);
         Log($"autopilot scenario {testScenario} frame={video.FrameWidth}x{video.FrameHeight} rateTarget={DisplayRate.Target} rates={string.Join("/", DisplayRate.Rates)} gyro={SystemInfo.supportsGyroscope}");
         if (testScenario == 2) yield return Scenario2();
         else yield return Scenario1();
@@ -191,6 +193,39 @@ public sealed partial class RekkrApp
         input.AutoStick = Vector2.zero; input.AutoTurn = 0; input.AutoFire = false; input.AutoUse = false;
     }
 
+    private int testGcStart = -1;
+
+    private static (float avg, float p99) Stats(List<float> values)
+    {
+        if (values.Count == 0) return (0, 0);
+        var sorted = new List<float>(values); sorted.Sort();
+        float sum = 0; foreach (var v in sorted) sum += v;
+        return (sum / sorted.Count, sorted[Math.Min(sorted.Count - 1, (int)(sorted.Count * 0.99F))]);
+    }
+
+    /// <summary>Android PowerManager thermal status (API 29+): 0 none … 6 shutdown; -1 unknown.</summary>
+    public static int ThermalStatus()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
+            {
+                if (version.GetStatic<int>("SDK_INT") < 29) return -1;
+            }
+            using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var pm = activity.Call<AndroidJavaObject>("getSystemService", "power"))
+            {
+                return pm.Call<int>("getCurrentThermalStatus");
+            }
+        }
+        catch (Exception) { return -1; }
+#else
+        return -1;
+#endif
+    }
+
     private void FinishTestLoop()
     {
         frameTimes.Sort();
@@ -199,7 +234,10 @@ public sealed partial class RekkrApp
         var avgFps = n / Math.Max(0.001F, sum);
         var p99 = frameTimes.Count > 0 ? frameTimes[(int)(frameTimes.Count * 0.99F)] * 1000F : 0;
         var p50 = frameTimes.Count > 0 ? frameTimes[frameTimes.Count / 2] * 1000F : 0;
-        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName}";
+        var (renderAvg, renderP99) = Stats(renderTimes);
+        var (uploadAvg, uploadP99) = Stats(uploadTimes);
+        var gc0 = GC.CollectionCount(0) - testGcStart;
+        var summary = $"[REKKR-TEST] scenario={testScenario} frames={frameTimes.Count} avg_fps={avgFps:F1} p50_frame_ms={p50:F1} p99_frame_ms={p99:F1} render_ms_avg={renderAvg:F2} render_ms_p99={renderP99:F2} upload_ms_avg={uploadAvg:F2} upload_ms_p99={uploadP99:F2} gc0={gc0} thermal={ThermalStatus()} target={DisplayRate.Target} screen={Screen.width}x{Screen.height} frame={video.FrameWidth}x{video.FrameHeight} device={SystemInfo.deviceModel} gpu={SystemInfo.graphicsDeviceName} api={SystemInfo.graphicsDeviceType}";
         Debug.Log(summary);
         try
         {

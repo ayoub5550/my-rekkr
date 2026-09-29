@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.3.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
@@ -51,6 +51,8 @@ public sealed partial class RekkrApp : MonoBehaviour
     private bool testLoop;
     private int testScenario = 1;
     private readonly List<float> frameTimes = new List<float>(40000);
+    private readonly List<float> renderTimes = new List<float>(40000);   // dev3: software render CPU ms
+    private readonly List<float> uploadTimes = new List<float>(40000);   // dev3: texture upload CPU ms
     private string shotDir;
 
     // Gameplay watchers (haptics, autosave).
@@ -261,7 +263,12 @@ public sealed partial class RekkrApp : MonoBehaviour
 
         fpsFrames++; fpsTimer += Time.unscaledDeltaTime;
         if (fpsTimer >= 0.5F) { fpsValue = fpsFrames / fpsTimer; fpsFrames = 0; fpsTimer = 0; }
-        if (testLoop) frameTimes.Add(Time.unscaledDeltaTime);
+        if (testLoop)
+        {
+            frameTimes.Add(Time.unscaledDeltaTime);
+            renderTimes.Add(video.LastRenderMs);
+            uploadTimes.Add(video.LastUploadMs);
+        }
     }
 
     /// <summary>Per-tic checks: vibration on attack/damage, and an autosave shortly after each level starts.</summary>

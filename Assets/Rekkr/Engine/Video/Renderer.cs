@@ -112,6 +112,9 @@ namespace ManagedDoom.Video
             }
         }
 
+        /// <summary>my-rekkr test hook: the palette-index frame (column-major x*height+y) for HOM scans.</summary>
+        public byte[] ScreenDataForTest => screen.Data;
+
         public void RenderDoom(Doom doom, Fixed frameFrac)
         {
             screen.OffsetX = 0;

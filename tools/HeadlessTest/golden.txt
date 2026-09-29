@@ -1,0 +1,177 @@
+# dev3 golden frame hashes (v0.2.0 Classic renderer). Regenerate ONLY if the Classic look is meant to change.
+attract w=1066 t=50 eaca0d6aa95b43bb
+attract w=1066 t=155 eaca0d6aa95b43bb
+attract w=1066 t=260 a7f2dd0da42fbd16
+attract w=1066 t=300 frac=0.5 e7f70db43a9e7d10
+attract w=1066 t=365 4aba5c1cf4f2779e
+attract w=1066 t=470 2b2fec430e258671
+attract w=1066 t=575 16e25e75c6743fe5
+attract w=1066 t=680 ed8fede9f916067e
+attract w=1066 t=785 56c9560527c7aa68
+attract w=1066 t=825 frac=0.5 8c3078d8760a5ca1
+attract w=1066 t=890 cf636f9f96dab067
+attract w=1066 t=995 1e2125423b4025ee
+attract w=1066 t=1100 af27177bcb6a8967
+attract w=1066 t=1205 36a8b06f6cffd3a5
+attract w=1066 t=1310 36a8b06f6cffd3a5
+attract w=1066 t=1350 frac=0.5 f5da7b4254f28360
+attract w=1066 t=1415 8d337750e75629e5
+attract w=1066 t=1520 b3c5e091e5465bb4
+attract w=1066 t=1625 507d181ba3629aaa
+attract w=1066 t=1730 29f876a43238ec50
+attract w=1066 t=1835 a319e9889cb0e6b7
+attract w=1066 t=1875 frac=0.5 a99fe28b1f60255b
+attract w=1066 t=1940 eaca0d6aa95b43bb
+attract w=1066 t=2045 eaca0d6aa95b43bb
+attract w=1066 t=2150 dd49bd0dd02fc5fa
+attract w=1066 t=2255 f4203dd1b5c5a697
+attract w=1066 t=2360 e7064aec1096f86b
+attract w=1066 t=2400 frac=0.5 d3fe6845bb8c0ade
+attract w=1066 t=2465 e673cf42bf278b77
+attract w=1066 t=2570 c7b1b3463b76bc12
+attract w=1066 t=2675 aeb65a6d9eb50e56
+attract w=1066 t=2780 f8b6424d13281391
+attract w=1066 t=2885 e9ed4743c4c05c29
+attract w=1066 t=2925 frac=0.5 f025bc4739f51b6f
+attract w=1066 t=2990 3027bd7761a77d14
+attract w=1066 t=3095 3a9cb3290e7fadce
+attract w=1066 t=3200 36a8b06f6cffd3a5
+attract w=1066 t=3305 36a8b06f6cffd3a5
+attract w=1066 t=3410 993ee5ee06394cac
+attract w=1066 t=3450 frac=0.5 ed4c086e37bda65b
+attract w=1066 t=3515 558dafd64d522a0f
+attract w=1066 t=3620 dbe0bd61d1c88673
+attract w=1066 t=3725 9fa367ddfeacdace
+attract w=1066 t=3830 0eafd693bb8f5e82
+attract w=1066 t=3935 bcf6bdd6db35e536
+attract w=1066 t=3975 frac=0.5 90ba6d93ba988ced
+attract w=1066 t=4040 5c134086ec11b240
+attract w=1066 t=4145 eaca0d6aa95b43bb
+attract w=1066 t=4250 eaca0d6aa95b43bb
+attract w=1066 t=4355 a3aafd87b30490d0
+attract w=1066 t=4460 2eacc439335c93d9
+attract w=1066 t=4500 frac=0.5 edf34e4a5b290ff4
+attract w=1066 t=4565 62c5662baf2f21f5
+attract w=1066 t=4670 514ba7bd5e8a375e
+attract w=1066 t=4775 b4623cae7a3dcbc0
+attract w=1066 t=4880 1433e0ae4761f2bc
+attract w=1066 t=4985 c5ed97f820b2f832
+attract w=1066 t=5025 frac=0.5 6f70a18266deebd7
+attract w=1066 t=5090 68be8d17695656b5
+attract w=1066 t=5195 aeea4785cc55885a
+E1M1 w=1066 size=7 93a208c09683253e
+E1M1 w=1066 size=9 5856abcf60012b90
+E1M1 w=1066 size=8 977a47d3cdc4ecce
+E1M1 w=1066 size=5 39b9de17751f480a
+E1M1 w=1066 frac=0.25 93a208c09683253e
+E1M1 w=1066 automap 32dbcfb76e1cf4f7
+E1M1 w=1066 menu c782e6b2b67985ea
+E2M1 w=1066 size=7 e02d622527cf3f20
+E2M1 w=1066 size=9 da4c780b4d090dcd
+E2M1 w=1066 size=8 9ab9198dacacc63d
+E2M1 w=1066 size=5 35d46d7caab2ff56
+E2M1 w=1066 frac=0.25 e02d622527cf3f20
+E2M1 w=1066 automap 27e85df3554f34d9
+E2M1 w=1066 menu 9948a2f6a0ea9f13
+E3M1 w=1066 size=7 e2342976158154ce
+E3M1 w=1066 size=9 3891bcc93fc9ff35
+E3M1 w=1066 size=8 3857572a8479a6c9
+E3M1 w=1066 size=5 6aa38394dc4e68da
+E3M1 w=1066 frac=0.25 e2342976158154ce
+E3M1 w=1066 automap bdff42cc62a20e56
+E3M1 w=1066 menu 55175d967a5f674b
+E4M1 w=1066 size=7 e53d04f568d85d87
+E4M1 w=1066 size=9 8ac819a9369f1fad
+E4M1 w=1066 size=8 c527e08a806fda37
+E4M1 w=1066 size=5 b98d95a25fb4625f
+E4M1 w=1066 frac=0.25 e53d04f568d85d87
+E4M1 w=1066 automap 0008d1a275501f43
+E4M1 w=1066 menu 1797c24a7631a4b0
+attract w=640 t=50 5ffc5b575c95d261
+attract w=640 t=155 5ffc5b575c95d261
+attract w=640 t=260 15320049716fd5fb
+attract w=640 t=300 frac=0.5 f564603d2194c483
+attract w=640 t=365 b93c23ceb2a568db
+attract w=640 t=470 7ff0729a10c5e764
+attract w=640 t=575 2cf4351af965fa00
+attract w=640 t=680 da5dbf1657f5530e
+attract w=640 t=785 35811e0dd8155606
+attract w=640 t=825 frac=0.5 2887b2c653603ce1
+attract w=640 t=890 14a36cbfe2231f34
+attract w=640 t=995 a45a12891334fb93
+attract w=640 t=1100 d434e78f316fec4c
+attract w=640 t=1205 5e305b731a1cd853
+attract w=640 t=1310 5e305b731a1cd853
+attract w=640 t=1350 frac=0.5 ded26d6ad978c428
+attract w=640 t=1415 895237dccf0c7a13
+attract w=640 t=1520 5fead8fbbd2f7693
+attract w=640 t=1625 b6baa4d5aab002c8
+attract w=640 t=1730 27dea7f304ff0157
+attract w=640 t=1835 8bfd4837117d8b91
+attract w=640 t=1875 frac=0.5 d2ef8ed1ad6e35b2
+attract w=640 t=1940 5ffc5b575c95d261
+attract w=640 t=2045 5ffc5b575c95d261
+attract w=640 t=2150 3f6d9ba765f76a0f
+attract w=640 t=2255 75cda9ee3b59791c
+attract w=640 t=2360 2f4d1aec6a5984fb
+attract w=640 t=2400 frac=0.5 d0bf23cf7e4dc011
+attract w=640 t=2465 0d59a25fd3bcf0a6
+attract w=640 t=2570 d8e0be304c8e6477
+attract w=640 t=2675 1ae34c934559bc31
+attract w=640 t=2780 93e8b24b56c6aa26
+attract w=640 t=2885 5ac4c99982383d98
+attract w=640 t=2925 frac=0.5 26b15e99c4717d5f
+attract w=640 t=2990 4cd17d3ff869b8dc
+attract w=640 t=3095 b25b49f2f0019321
+attract w=640 t=3200 5e305b731a1cd853
+attract w=640 t=3305 6ed8ee39110e811e
+attract w=640 t=3410 dc73fa70e422a65c
+attract w=640 t=3450 frac=0.5 003486fa65f9eca2
+attract w=640 t=3515 6d79f3ab500751f4
+attract w=640 t=3620 2152306f58b3e203
+attract w=640 t=3725 4768d1537a7e4b42
+attract w=640 t=3830 19ccecfe079bb569
+attract w=640 t=3935 25ff5b9615520d3b
+attract w=640 t=3975 frac=0.5 0550e1d8c6736ec5
+attract w=640 t=4040 1ff3dc273f82cea3
+attract w=640 t=4145 5ffc5b575c95d261
+attract w=640 t=4250 5ffc5b575c95d261
+attract w=640 t=4355 748abeb5f0ee9032
+attract w=640 t=4460 05302094aa12d56c
+attract w=640 t=4500 frac=0.5 364d6c072d427673
+attract w=640 t=4565 34cb96ea0af2cc65
+attract w=640 t=4670 5f128f2fee2ec7db
+attract w=640 t=4775 16d3deae01d5b5ba
+attract w=640 t=4880 f0f2f99462b720ed
+attract w=640 t=4985 3da3f662b00fca5d
+attract w=640 t=5025 frac=0.5 88501224e8d489f5
+attract w=640 t=5090 b15f2d93b4809054
+attract w=640 t=5195 13df7060b1adec1e
+E1M1 w=640 size=7 4653e232f00f3bed
+E1M1 w=640 size=9 14a10c4614cb33c6
+E1M1 w=640 size=8 c89c6a9a87354822
+E1M1 w=640 size=5 d13fd4eed3edc2b5
+E1M1 w=640 frac=0.25 4653e232f00f3bed
+E1M1 w=640 automap 84795adfd69a163c
+E1M1 w=640 menu 02357187e9a73dc8
+E2M1 w=640 size=7 537d273228fd5af1
+E2M1 w=640 size=9 bad67f63d39d1417
+E2M1 w=640 size=8 f80998bd2728bade
+E2M1 w=640 size=5 5357e35adf18e5c6
+E2M1 w=640 frac=0.25 537d273228fd5af1
+E2M1 w=640 automap 427bd2ab5ff1a60a
+E2M1 w=640 menu c127a22055e82cca
+E3M1 w=640 size=7 62e1fffb708f5662
+E3M1 w=640 size=9 7bd04b829fd71113
+E3M1 w=640 size=8 4a61f03e44ed64d5
+E3M1 w=640 size=5 feb5dacd718c816e
+E3M1 w=640 frac=0.25 62e1fffb708f5662
+E3M1 w=640 automap 0f48970bb96d4f5a
+E3M1 w=640 menu 3ab01b2597593d74
+E4M1 w=640 size=7 71baea9349973bfa
+E4M1 w=640 size=9 24506621dc1a2845
+E4M1 w=640 size=8 4f7ec7a0456b160c
+E4M1 w=640 size=5 4e2a867d8f07ab08
+E4M1 w=640 frac=0.25 71baea9349973bfa
+E4M1 w=640 automap 3693dc1f6c8e3834
+E4M1 w=640 menu 0f6b2aca4b4545b4

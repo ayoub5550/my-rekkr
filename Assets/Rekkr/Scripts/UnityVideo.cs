@@ -53,11 +53,22 @@ namespace ManagedDoom.UnityPort
         public int Scale => renderer.Scale;
         public byte[] FrameData => frame;
 
+        /// <summary>CPU time of the last software render / texture upload in ms (dev3 instrumentation).</summary>
+        public float LastRenderMs { get; private set; }
+        public float LastUploadMs { get; private set; }
+        private readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+
         public void Render(Doom doom, Fixed frameFrac)
         {
+            watch.Restart();
             renderer.Render(doom, frame, frameFrac);
+            var t1 = watch.ElapsedTicks;
             texture.SetPixelData(frame, 0);
             texture.Apply(false, false);
+            var t2 = watch.ElapsedTicks;
+            var toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            LastRenderMs = (float)(t1 * toMs);
+            LastUploadMs = (float)((t2 - t1) * toMs);
         }
 
         public void InitializeWipe() => renderer.InitializeWipe();
