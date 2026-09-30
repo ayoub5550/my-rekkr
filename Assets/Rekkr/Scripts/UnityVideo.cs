@@ -87,6 +87,11 @@ namespace ManagedDoom.UnityPort
         public static bool ZeroCopy = true;
 
         public Texture2D Texture => texture;
+
+        /// <summary>dev6: the frame after the Remaster compositor (null = the software frame is final).</summary>
+        public UnityEngine.Texture Override;
+        /// <summary>dev6: the frame to post-process / show: the composited Remaster frame or the software texture.</summary>
+        public UnityEngine.Texture FrameTexture => Override != null ? Override : texture;
         public int RenderThreads => renderer.RenderThreads;
         public bool Centred => renderer.LastFrameCentred;
         public float CentredX0 => renderer.CentredX0;

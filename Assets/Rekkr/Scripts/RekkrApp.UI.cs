@@ -48,7 +48,7 @@ public sealed partial class RekkrApp
         if (evt == EventType.Repaint)
         {
             if (postThisFrame) postFx.Draw(gameRect);
-            else Graphics.DrawTexture(gameRect, video.Texture, screenMat);
+            else Graphics.DrawTexture(gameRect, video.FrameTexture, screenMat);
             if (input.EditMode)
             {
                 GUI.color = new Color(0, 0, 0, 0.55F);
@@ -517,7 +517,14 @@ public sealed partial class RekkrApp
         }
         else
         {
-            // dev5 world effects, page 2 of 2
+            // dev6: renderer (software original / Remaster GPU 3D) + its options, then dev5 world effects page 2
+            if (Cycle(Loc.T("renderer"), Loc.T(RekkrSettings.Remaster ? "renderer_gpu" : "renderer_sw"))) RekkrSettings.Remaster = !RekkrSettings.Remaster;
+            if (RekkrSettings.Remaster)
+            {
+                if (Cycle(Loc.T("rm_things"), Loc.T("rm_things_" + RekkrSettings.RemasterThings))) RekkrSettings.RemasterThings = (RekkrSettings.RemasterThings + 1) % 2;
+                var sh = Toggle(Loc.T("rm_shadows"), RekkrSettings.RemasterShadows);
+                if (sh != RekkrSettings.RemasterShadows) RekkrSettings.RemasterShadows = sh;
+            }
             var a = Toggle(Loc.T("fx_ao"), RekkrSettings.AO);
             if (a != RekkrSettings.AO) { RekkrSettings.AO = a; MarkCustom(); }
             var b = Toggle(Loc.T("fx_particles"), RekkrSettings.Particles);

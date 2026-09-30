@@ -13,6 +13,8 @@ namespace ManagedDoom.Video
         public const byte HotBase = 236, HotLevels = 12;       // 236..247
         public const byte Sky = 248;
         public const byte Weapon = 249;
+        public const byte GpuDark = 251;   // dev6: GPU pixel under a dark translucent 2D panel (fullscreen HUD)
+        public const byte Gpu = 250;       // dev6: pixel to be filled by the Remaster GPU renderer (never leaves the compositor)
         public const byte None = 255;
         public const int SolidLevels = 200;                    // 0..199
         public const float DepthK = 19.9F;                     // code = log2(z/8) * K

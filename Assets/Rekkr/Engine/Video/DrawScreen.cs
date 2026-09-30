@@ -387,7 +387,8 @@ namespace ManagedDoom.Video
                 for (var drawY = y1; drawY < y2; drawY++)
                 {
                     data[pos] = map[data[pos]];
-                    if (GData != null) GData[pos] = 255;
+                    // dev6: a darkened panel over the Remaster GPU view keeps the GPU pixel, darkened (251)
+                    if (GData != null) GData[pos] = GData[pos] == GBuffer.Gpu ? GBuffer.GpuDark : (byte)255;
                     pos++;
                 }
             }

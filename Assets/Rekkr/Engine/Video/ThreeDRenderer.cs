@@ -369,6 +369,23 @@ namespace ManagedDoom.Video
         // rows around the level, so the original 32 bands become smooth gradients while every pixel
         // keeps REKKR's own COLORMAP tones.
         public static bool TrueColor;
+
+        /// <summary>my-rekkr dev6: skip the software 3D world (walls, flats, sprites); the Remaster GPU
+        /// renderer draws it. Only used with TrueColor (the G-buffer marks the pixels for the compositor).</summary>
+        public static bool WorldPassOff;
+
+        private void ClearWindowForGpu()
+        {
+            var fill = colorMap[0][0];
+            for (var x = StripLeft; x < StripRight; x++)
+            {
+                var pos = screenHeight * (windowX + x) + windowY;
+                Array.Fill(screenData, fill, pos, windowHeight);
+                Array.Fill(texData, (byte)0, pos, windowHeight);
+                Array.Fill(lightData, (ushort)0, pos, windowHeight);
+                Array.Fill(gData, GBuffer.Gpu, pos, windowHeight);
+            }
+        }
         private bool tc;
         private int[][] diminishingScaleLevel;
         private int[][] diminishingZLevel;
@@ -900,10 +917,21 @@ namespace ManagedDoom.Video
             ClearRenderingHistory();
             ClearSpriteRendering();
 
-            RenderBspNode(world.Map.Nodes.Length - 1);
-            RenderSprites();
-            RenderMaskedTextures();
-            DrawPlayerSprites(player);
+            if (WorldPassOff && tc)
+            {
+                // my-rekkr dev6 Remaster: the GPU draws the 3D world. Mark the window (this strip's
+                // columns) as "GPU here" (G-buffer code 250) and draw only the weapon; 2D drawn later
+                // (HUD, messages, menus) marks its pixels 255, so the compositor keeps it.
+                ClearWindowForGpu();
+                DrawPlayerSprites(player);
+            }
+            else
+            {
+                RenderBspNode(world.Map.Nodes.Length - 1);
+                RenderSprites();
+                RenderMaskedTextures();
+                DrawPlayerSprites(player);
+            }
 
             if (windowSize < 7 && drawBackScreen)
             {

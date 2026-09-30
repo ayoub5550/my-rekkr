@@ -57,7 +57,7 @@ namespace ManagedDoom.UnityPort
         public void Process(UnityVideo video, Rect gameRect, UnityEngine.Texture source = null)
         {
             Ensure(Mathf.RoundToInt(gameRect.width), Mathf.RoundToInt(gameRect.height));
-            Graphics.Blit(source != null ? source : (UnityEngine.Texture)video.Texture, scene, screen);   // dev5: source = WorldFx output
+            Graphics.Blit(source != null ? source : video.FrameTexture, scene, screen);   // dev5: source = WorldFx output
 
             var bloomOn = RekkrSettings.Bloom > 0;
             if (bloomOn)

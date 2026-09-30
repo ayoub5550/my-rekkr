@@ -12,6 +12,8 @@ public static class HomScan
 {
     public const int SamplesPerMap = 40;
     public const int Angles = 8;
+    // dev6: HOM_PITCHES="-80,0,80" also scans free-look views (dev4 y-shear).
+    public static readonly int[] Pitches = (Environment.GetEnvironmentVariable("HOM_PITCHES") ?? "0").Split(',').Select(int.Parse).ToArray();
 
     public static int Run(GameContent content, CommandLineArgs args, string[] widths, string outDir)
     {
@@ -61,8 +63,10 @@ public static class HomScan
                         var vz = mo.Z + Player.NormalViewHeight;
                         if (vz > sec.CeilingHeight - Fixed.FromInt(4)) vz = sec.CeilingHeight - Fixed.FromInt(4);
                         player.ViewZ = vz;
+                        foreach (var pitch in Pitches)
                         for (int a = 0; a < Angles; a++)
                         {
+                            v.Inner.LocalViewPitch = pitch;
                             mo.Angle = new Angle((uint)(a * (uint.MaxValue / Angles)));
                             var data = v.Inner.ScreenDataForTest;
                             Array.Fill(data, (byte)0);
@@ -76,7 +80,7 @@ public static class HomScan
                             if (diff > 0)
                             {
                                 bad++; mapBad++;
-                                var line = $"HOM E{e}M{m} w={wide} at=({px.ToIntFloor()},{py.ToIntFloor()}) {tag} angle={a * 360 / Angles} sector={Array.IndexOf(map.Sectors, sec)} pixels={diff}";
+                                var line = $"HOM E{e}M{m} w={wide} at=({px.ToIntFloor()},{py.ToIntFloor()}) {tag} angle={a * 360 / Angles} pitch={pitch} sector={Array.IndexOf(map.Sectors, sec)} pixels={diff}";
                                 report.Add(line);
                                 if (diff > mapWorst)
                                 {

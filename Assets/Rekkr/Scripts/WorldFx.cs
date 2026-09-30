@@ -47,6 +47,13 @@ namespace ManagedDoom.UnityPort
                         Fog = new Color(0.56F, 0.38F, 0.45F), FogMul = 0.9F, AutoWeather = 4, DriftBamPerSec = 1.0e6F },
         };
 
+        /// <summary>dev6: the episode's sun (yaw/elevation in degrees, strength, colour) for the Remaster shadows.</summary>
+        public static (float yaw, float elev, float strength, Color color) SunOf(int episode)
+        {
+            var a = Episodes[Mathf.Clamp(episode, 1, 4) - 1];
+            return (a.SunYaw, a.SunElev, a.SunStrength, a.Sun);
+        }
+
         public WorldFx(GameContent content)
         {
             this.content = content;
@@ -98,7 +105,7 @@ namespace ManagedDoom.UnityPort
         /// (same layout as the input), or the input when nothing to do.</summary>
         public Texture Process(UnityVideo video, Doom doom, bool inLevel, Fixed frameFrac)
         {
-            var src = video.Texture;
+            var src = video.FrameTexture;   // dev6: Remaster composite when active
             if (!inLevel || !RekkrSettings.SmoothLighting) { ThreeDRenderer.SkyDriftBam = 0; return src; }
             var world3 = doom.Game.World;
             var ep = Mathf.Clamp(doom.Game.Options.Episode, 1, 4) - 1;

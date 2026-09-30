@@ -56,6 +56,8 @@ public sealed partial class RekkrApp
         else if (testScenario == 3) yield return Scenario3();
         else if (testScenario == 4) yield return Scenario4();
         else if (testScenario == 5) yield return Scenario5();
+        else if (testScenario == 6) yield return Scenario6();
+        else if (testScenario == 7) yield return Scenario7();
         else yield return Scenario1();
         FinishTestLoop();
     }

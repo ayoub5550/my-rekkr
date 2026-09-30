@@ -51,6 +51,7 @@ namespace ManagedDoom.UnityPort
         public float Pitch => pitch;
         public int PitchInt => Mathf.Clamp(Mathf.RoundToInt(pitch), -TicCmdExt.MaxPitch, TicCmdExt.MaxPitch);
         public void CenterView() { pitch = 0; }
+        public void SetPitch(float p) { pitch = p; }   // dev6 tests
         private float lastLookTap = -10;
 
         // dev5 weapon wheel: long-press WEAPON opens a radial wheel of owned weapons; slide + release selects.

@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.5.0";
+    public const string Version = "0.6.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
@@ -35,6 +35,7 @@ public sealed partial class RekkrApp : MonoBehaviour
     private Material screenMat;
     private PostFx postFx;
     private WorldFx worldFx;   // dev5
+    private GpuRenderer gpu;   // dev6 Remaster
     private bool postThisFrame;
     private Texture2D texBtn, texBtnPressed, texStickBase, texStickKnob, texWhite;
     private readonly Dictionary<string, Texture2D> icons = new Dictionary<string, Texture2D>();
@@ -130,6 +131,8 @@ public sealed partial class RekkrApp : MonoBehaviour
         var envPreset = Environment.GetEnvironmentVariable("REKKR_PRESET");   // desktop/test: force a graphics preset
         if (!string.IsNullOrEmpty(envPreset)) RekkrSettings.ApplyPreset(int.Parse(envPreset));
         WorldFx.DebugView = Environment.GetEnvironmentVariable("REKKR_GBUF") == "1";
+        var envRen = Environment.GetEnvironmentVariable("REKKR_RENDERER");   // desktop/test: software | remaster
+        if (!string.IsNullOrEmpty(envRen)) RekkrSettings.Remaster = envRen == "remaster";
         var envLight = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR");
         if (!string.IsNullOrEmpty(envLight)) RekkrSettings.SmoothLighting = envLight == "1";
     }
@@ -271,6 +274,7 @@ public sealed partial class RekkrApp : MonoBehaviour
         {
             ticAccum += Math.Min(Time.unscaledDeltaTime, 0.25);
             var tics = 0;
+            if (freezeWorld) ticAccum = 0;   // dev6 test: hold the world still for A/B captures
             while (ticAccum >= TicTime && tics < 6)
             {
                 ticAccum -= TicTime;
@@ -288,8 +292,19 @@ public sealed partial class RekkrApp : MonoBehaviour
             // dev4 free look: the view uses this frame's pitch; the sim gets it with the next tic.
             ThreeDRenderer.FreeLookSky = RekkrSettings.FreeLook;
             video.LocalViewPitch = RekkrSettings.FreeLook && InLevel ? input.PitchInt : 0;
-            ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting;
+            // dev6 Remaster: the GPU draws the 3D world of the level on screen (game, demo, title demo);
+            // the software renderer still draws the 2D (HUD, menus, weapon) and wipes.
+            var levelGame = RekkrSettings.Remaster && !Doom.Wiping ? GpuRenderer.LevelGame(Doom) : null;
+            ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting || levelGame != null;
+            ThreeDRenderer.WorldPassOff = levelGame != null;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            ThreeDRenderer.WorldPassOff = false;
+            video.Override = null;
+            if (levelGame != null)
+            {
+                gpu ??= new GpuRenderer(content);
+                video.Override = gpu.Render(video, levelGame, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            }
             postThisFrame = PostFx.Active;
             UnityEngine.Texture frameTex = null;
             if (WorldFx.Active)
@@ -298,6 +313,7 @@ public sealed partial class RekkrApp : MonoBehaviour
                 frameTex = worldFx.Process(video, Doom, InLevel && !Doom.Game.World.AutoMap.Visible, Fixed.FromFloat(Mathf.Clamp01(frac)));
             }
             else ThreeDRenderer.SkyDriftBam = 0;
+            lastShownFrame = frameTex != null ? frameTex : video.FrameTexture;
             if (postThisFrame) postFx.Process(video, gameRect, frameTex);
             if (testLoop) TrackViewAngle(frac);
             UpdateDynamicResolution();

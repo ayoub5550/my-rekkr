@@ -487,7 +487,7 @@ namespace ManagedDoom.Video
             }
         }
 
-        private static int GetPaletteNumber(Player player)
+        public static int GetPaletteNumber(Player player)   // my-rekkr dev6: public (GPU renderer)
         {
             var count = player.DamageCount;
 

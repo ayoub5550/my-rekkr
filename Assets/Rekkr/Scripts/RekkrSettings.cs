@@ -54,6 +54,9 @@ namespace ManagedDoom.UnityPort
         public static bool AO;                   // ambient occlusion in corners
         public static bool Particles;            // sparks, blood drops, splashes, embers
         public static bool DoF;                  // depth of field (far blur)
+        public static bool Remaster;             // dev6: GPU 3D renderer ("Remaster") instead of the software 3D view
+        public static int RemasterThings = 1;    // dev6: 0 flat billboards (original sprites), 1 extruded 3D voxel sprites
+        public static bool RemasterShadows = true; // dev6: sun shadow map in outdoor areas
 
         // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads, dev5 fx
         private static readonly (int res, bool dyn, bool light, int bloom, int vig, int grade, bool sharp, bool crt, bool side, int threads, bool fx)[] Presets =
@@ -146,6 +149,9 @@ namespace ManagedDoom.UnityPort
             AO = PlayerPrefs.GetInt("fx_ao", 0) == 1;
             Particles = PlayerPrefs.GetInt("fx_particles", 0) == 1;
             DoF = PlayerPrefs.GetInt("fx_dof", 0) == 1;
+            Remaster = PlayerPrefs.GetInt("gfx_remaster", 0) == 1;
+            RemasterThings = Mathf.Clamp(PlayerPrefs.GetInt("rm_things", 1), 0, 1);
+            RemasterShadows = PlayerPrefs.GetInt("rm_shadows", 1) == 1;
             ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 3);
             // First start (new install): pick a preset for the device (dev5: Masterpiece on 8-core phones).
             var fresh = !PlayerPrefs.HasKey("gfx_preset");
@@ -224,6 +230,9 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("fx_ao", AO ? 1 : 0);
             PlayerPrefs.SetInt("fx_particles", Particles ? 1 : 0);
             PlayerPrefs.SetInt("fx_dof", DoF ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_remaster", Remaster ? 1 : 0);
+            PlayerPrefs.SetInt("rm_things", RemasterThings);
+            PlayerPrefs.SetInt("rm_shadows", RemasterShadows ? 1 : 0);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

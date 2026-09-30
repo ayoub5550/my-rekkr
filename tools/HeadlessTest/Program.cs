@@ -25,6 +25,7 @@ public static class Program
         var thr = Environment.GetEnvironmentVariable("REKKR_THREADS");
         ThreeDRendererPool.Threads = string.IsNullOrEmpty(thr) ? 1 : int.Parse(thr);
         ThreeDRenderer.TrueColor = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR") == "1";
+        ThreeDRenderer.FreeLookSky = Environment.GetEnvironmentVariable("REKKR_FREELOOKSKY") == "1";   // dev6: device default
         if (mode == "lightcmp")
         {
             var largs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
@@ -58,6 +59,16 @@ public static class Program
         {
             var targs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
             return TexHoles.Run(new GameContent(targs), targs);
+        }
+        if (mode == "dev6")
+        {
+            var dargs6 = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return Dev6Test.Run(new GameContent(dargs6), dargs6, outDir);
+        }
+        if (mode == "shot")
+        {
+            var sargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return ShotAt.Run(new GameContent(sargs), sargs, argv, outDir);
         }
         if (mode == "hom")
         {
