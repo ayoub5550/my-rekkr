@@ -1,7 +1,13 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-30 (v0.6.0, dev6).
+Last updated: 2026-09-30 (v0.7.0, dev7).
 
+> **dev7 (v0.7.0) — the first release merged into `main`** (owner approval 2026-09-30): fixes for the owner's 0.6.0
+> reports (settings not applied on demos / smooth lighting in Remaster, far too strong dynamic lights, bad fog and
+> weather), Remaster point-light shadows + 3D weapon, save backup (document picker), full gamepad + remap. Plan, status
+> and measurements: [`docs/DEV7.md`](docs/DEV7.md). New test scenarios 8 (settings coverage), 9 (backup round trip),
+> 10 (Remaster weapon / lights / door + lift), 11 (all 36 maps in Remaster).
+>
 > **dev5 (v0.5.0) was released 2026-09-29 from branch `feat/dev5`** (GitHub release v0.5.0): the G-buffer in the frame
 > alpha feeds GPU effects: living sky and sun rays, reflective water, hot liquids, fog, weather and lightning, dynamic
 > lights, particles, AO, the Voxile grade and the Masterpiece preset; plus the weapon wheel and automap touch. Plan and
@@ -69,6 +75,9 @@ v0.1.0 checkpoint:
   Remaster is offered only on strong GPUs (`RekkrSettings.RemasterAllowed`; Mali-G57 ran it at 19–28 fps).
   Test Lab r8q Remaster 84–103 fps; a15 (weak) 22–38 fps in software, same as v0.5.0 (≥ 55 gate open).
   Details and honest stage status: `docs/DEV6.md` §6/§9.
+
+- v0.7.0 (dev7), merged into `main`: see the note at the top and `docs/DEV7.md` §3/§4. Same keystore as 0.6.0 (installs
+  over it). Gamepad and the document picker are **not tested on hardware** (no pad / no person on Test Lab).
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
@@ -169,6 +178,11 @@ The same setup is used for my-librequake (its §9).
 - MAPINFO in the WAD is ZDoom-only and is ignored, as in vanilla. E4 uses the vanilla E4 music list,
   which is REKKR's own songs.
 - `ManagedDoom.EventType`/`DoomKey` clash with `UnityEngine.EventType`. Qualify them.
+- dev7: shader passes are addressed by their **order in the file** — add new passes at the end (RemasterWorld 6 = point
+  shadow caster). World effects need the G-buffer: pass `ThreeDRenderer.TrueColor ? LevelGame : null` to `WorldFx`.
+- dev7: weather is world particles (sky sectors only); the old screen-space `WeatherLayer` is gone — do not bring it back.
+- dev7: a Doom sight check from the render side (`VisibilityCheck.CheckSight`) only bumps `validcount`; it does not
+  touch the RNG or the demo/golden results (HeadlessTest PASS).
 - Do not use Freedoom as the IWAD. All content except the two patches stays 100 % REKKR.
 - No commercial packaging (CC BY-NC).
 
@@ -177,8 +191,7 @@ The same setup is used for my-librequake (its §9).
 dev2 did the soundfont, widescreen, button editor, haptics and quick save.
 - Remaining ideas:
   - An in-game localized Doom menu. The WAD graphics stay English, so it would need a custom overlay.
-  - Controller button remapping UI.
-  - Cloud or exported saves.
+  - (dev7 did controller remapping and exported saves.)
   - A human playtest on a POCO F3, including gyro direction (yaw and the new pitch) and audio.
   - Fewer gen0 GCs on IL2CPP. Run the weak-device test and add a GPU-class rule for auto-Masterpiece (DEV5 open items).
   - dev6: the GPU 3D renderer and voxel things (`docs/DEV6.md`).
