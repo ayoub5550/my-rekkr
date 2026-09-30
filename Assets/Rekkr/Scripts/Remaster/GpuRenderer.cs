@@ -387,6 +387,10 @@ namespace ManagedDoom.UnityPort
         // per light, stored as 3x2 tiles (+X -X +Y -Y +Z -Z) of a 2D RFloat atlas (no cube render targets).
         public const int PointShadowSize = 256;
         public const int MaxPointLights = 4, MaxPointShadows = 2;
+        // Each shadowed light re-draws the level mesh into 6 faces, so the shadow count follows a triangle
+        // budget: 2 on normal maps, 1 on huge ones (E1M7 = 174k tris ran at 47 fps on r8q with 2), 0 beyond.
+        public const int ShadowTriBudget = 240000;
+        public int ShadowCap => Triangles <= 0 ? MaxPointShadows : Mathf.Clamp(ShadowTriBudget / Triangles, 0, MaxPointShadows);
         private RenderTexture pointRt;
         private readonly Matrix4x4[] pointVP = new Matrix4x4[MaxPointShadows * 6];
         private readonly Vector4[] plPos = new Vector4[MaxPointLights], plCol = new Vector4[MaxPointLights];
@@ -399,7 +403,7 @@ namespace ManagedDoom.UnityPort
 
         private int RenderPointLights(WorldFx fx, ThreeDRenderer.ViewInfo v)
         {
-            var n = 0; var shadows = 0; var calls = 0;
+            var n = 0; var shadows = 0; var calls = 0; var shadowCap = ShadowCap;
             if (fx != null && RekkrSettings.DynLights && WorldFx.RemasterLights)
             {
                 for (var i = 0; i < fx.LightsLastFrame && n < MaxPointLights; i++)
@@ -408,7 +412,7 @@ namespace ManagedDoom.UnityPort
                     if (p.w <= 0) continue;
                     plPos[n] = new Vector4(p.x, p.z, p.y, p.w);   // unity (doom x, height, doom y), radius
                     // shadows: the first two sources that are not the muzzle flash / puffs (radius >= 120)
-                    var shadowed = RekkrSettings.RemasterLightShadows && shadows < MaxPointShadows && p.w >= 120F && !(i == fx.LightsLastFrame - 1 && fx.MuzzleLast);
+                    var shadowed = RekkrSettings.RemasterLightShadows && shadows < shadowCap && p.w >= 120F && !(i == fx.LightsLastFrame - 1 && fx.MuzzleLast);
                     plCol[n] = new Vector4(c.x, c.y, c.z, shadowed ? shadows : -1);
                     if (shadowed) { calls += RenderPointShadow(shadows, new UVec(p.x, p.z, p.y), p.w); shadows++; }
                     n++;
