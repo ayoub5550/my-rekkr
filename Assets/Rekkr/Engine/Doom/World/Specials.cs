@@ -34,6 +34,11 @@ namespace ManagedDoom
 
         private int[] textureTranslation;
         private int[] flatTranslation;
+        // my-rekkr dev8: the picture each animated slot shows NEXT (render-side cross-fade only; never read by the sim)
+        private int[] textureTranslationNext;
+        private int[] flatTranslationNext;
+        /// <summary>my-rekkr dev8: tics per picture of the flat / texture animations (all vanilla sequences use 8).</summary>
+        public int AnimSpeed { get; private set; } = 8;
 
         private LineDef[] scrollLines;
 
@@ -278,13 +283,17 @@ namespace ManagedDoom
                 for (var i = anim.BasePic; i < anim.BasePic + anim.NumPics; i++)
                 {
                     var pic = anim.BasePic + ((world.LevelTime / anim.Speed + i) % anim.NumPics);
+                    var next = anim.BasePic + ((world.LevelTime / anim.Speed + 1 + i) % anim.NumPics);   // dev8
+                    AnimSpeed = anim.Speed;
                     if (anim.IsTexture)
                     {
                         textureTranslation[i] = pic;
+                        if (textureTranslationNext != null) textureTranslationNext[i] = next;
                     }
                     else
                     {
                         flatTranslation[i] = pic;
+                        if (flatTranslationNext != null) flatTranslationNext[i] = next;
                     }
                 }
             }
@@ -328,5 +337,42 @@ namespace ManagedDoom
 
         public int[] TextureTranslation => textureTranslation;
         public int[] FlatTranslation => flatTranslation;
+
+        /// <summary>my-rekkr dev8: next picture per slot (identity for slots that do not animate).</summary>
+        public int[] TextureTranslationNext
+        {
+            get
+            {
+                if (textureTranslationNext == null) { textureTranslationNext = (int[])textureTranslation.Clone(); FillNext(); }
+                return textureTranslationNext;
+            }
+        }
+
+        public int[] FlatTranslationNext
+        {
+            get
+            {
+                if (flatTranslationNext == null) { flatTranslationNext = (int[])flatTranslation.Clone(); FillNext(); }
+                return flatTranslationNext;
+            }
+        }
+
+        private void FillNext()
+        {
+            foreach (var anim in world.Map.Animation.Animations)
+                for (var i = anim.BasePic; i < anim.BasePic + anim.NumPics; i++)
+                {
+                    var next = anim.BasePic + ((Math.Max(0, world.LevelTime - 1) / anim.Speed + 1 + i) % anim.NumPics);
+                    if (anim.IsTexture) { if (textureTranslationNext != null) textureTranslationNext[i] = next; }
+                    else if (flatTranslationNext != null) flatTranslationNext[i] = next;
+                }
+        }
+
+        /// <summary>my-rekkr dev8: 0..1 progress from the current picture to the next (frame-interpolated).</summary>
+        public float AnimBlend(float frameFrac)
+        {
+            var n = Math.Max(0, world.LevelTime - 1);   // Update ran with the level time before the increment
+            return Math.Clamp(((n % AnimSpeed) + frameFrac) / AnimSpeed, 0F, 1F);
+        }
     }
 }

@@ -348,9 +348,11 @@ namespace ManagedDoom.UnityPort
         }
 
         // ---------------------------------------------------------------- particles (visual only)
-        private struct Particle { public UVec P, V; public Color C; public float Life, MaxLife, Size, Floor; public bool Glow, Rise; }
+        // dev8: Solid = alpha-blended (pass 6: smoke, chips, blood), Grow = size growth per second, Stick = rests on the floor
+        private struct Particle { public UVec P, V; public Color C; public float Life, MaxLife, Size, Floor, Grow, Drag; public bool Glow, Rise, Solid, Stick, Rest; }
         private struct Drop { public UVec P, V; public float Floor, Life, Phase; public byte Kind; }   // dev7 weather
-        private readonly List<Particle> particles = new List<Particle>(512);
+        private const int MaxParticles = 900;   // dev8 (was 512): impacts, smoke and debris
+        private readonly List<Particle> particles = new List<Particle>(MaxParticles);
         private readonly HashSet<Mobj> seen = new HashSet<Mobj>();
         private readonly HashSet<Mobj> alive = new HashSet<Mobj>();
         private World lastWorld;
@@ -358,8 +360,57 @@ namespace ManagedDoom.UnityPort
 
         private void Spawn(UVec p, UVec vel, Color c, float life, float size, float floor, bool glow, bool rise = false)
         {
-            if (particles.Count >= 512) return;
+            if (particles.Count >= MaxParticles) return;
             particles.Add(new Particle { P = p, V = vel, C = c, Life = life, MaxLife = life, Size = size, Floor = floor, Glow = glow, Rise = rise });
+        }
+
+        /// <summary>dev8: alpha-blended particle (smoke, chips, debris, blood).</summary>
+        private void SpawnSolid(UVec p, UVec vel, Color c, float life, float size, float floor, float grow = 0, bool rise = false, float drag = 0, bool stick = false)
+        {
+            if (particles.Count >= MaxParticles) return;
+            particles.Add(new Particle { P = p, V = vel, C = c, Life = life, MaxLife = life, Size = size, Floor = floor, Grow = grow, Drag = drag, Rise = rise, Solid = true, Stick = stick });
+        }
+
+        private static UVec Rnd(float h, float z0, float z1) => new UVec(Random.Range(-h, h), Random.Range(-h, h), Random.Range(z0, z1));
+
+        /// <summary>dev8 bullet impact: stone chips that bounce, a small dust puff that drifts up.</summary>
+        private void ImpactDetail(UVec p, float floor)
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                var g = Random.Range(0.18F, 0.32F);
+                SpawnSolid(p, Rnd(110F, 30F, 170F), new Color(g, g * 0.92F, g * 0.8F, 0.95F), Random.Range(0.6F, 1.0F), 0.9F, floor);
+            }
+            for (var i = 0; i < 2; i++)
+                SpawnSolid(p + Rnd(2F, 0F, 2F), Rnd(12F, 8F, 22F), new Color(0.5F, 0.48F, 0.44F, 0.28F), Random.Range(0.6F, 0.9F), 2.5F, floor - 50F, 9F, true, 1.5F);
+        }
+
+        /// <summary>dev8 blood: more drops, a fine mist, and drops that rest on the floor for a while.</summary>
+        private void BloodDetail(UVec p, float floor)
+        {
+            for (var i = 0; i < 6; i++)
+                SpawnSolid(p, Rnd(70F, 20F, 120F), new Color(Random.Range(0.35F, 0.55F), 0.02F, 0.02F, 0.95F), Random.Range(1.6F, 3.0F), Random.Range(1.2F, 2.0F), floor, 0, false, 0, true);
+            SpawnSolid(p, Rnd(10F, 4F, 14F), new Color(0.45F, 0.03F, 0.03F, 0.35F), 0.5F, 2.5F, floor - 50F, 10F, true, 2F);
+        }
+
+        /// <summary>dev8 explosion: rising dark smoke, glowing embers and debris thrown out.</summary>
+        private void ExplosionDetail(AnimFx.Explosion e)
+        {
+            var n = e.Big ? 14 : 5;
+            for (var i = 0; i < n; i++)
+            {
+                var g = Random.Range(0.14F, 0.26F);
+                SpawnSolid(e.P + Rnd(14F * e.Size, -4F, 10F), Rnd(30F * e.Size, 18F, 55F), new Color(g, g * 0.95F, g * 0.9F, 0.62F),
+                           Random.Range(1.4F, 2.6F) * (e.Big ? 1F : 0.7F), 9F * e.Size, e.Floor - 200F, 16F * e.Size, true, 1.1F);
+            }
+            for (var i = 0; i < (e.Big ? 16 : 6); i++)
+                Spawn(e.P, Rnd(160F * e.Size, 40F, 220F * e.Size), new Color(1F, Random.Range(0.4F, 0.7F), 0.15F, 1F), Random.Range(0.4F, 0.9F), 1.1F, e.Floor, true);
+            if (!e.Big) return;
+            for (var i = 0; i < 8; i++)
+            {
+                var g = Random.Range(0.1F, 0.22F);
+                SpawnSolid(e.P, Rnd(200F, 80F, 260F), new Color(g, g * 0.9F, g * 0.8F, 1F), Random.Range(1.0F, 1.6F), 1.4F, e.Floor);
+            }
         }
 
         private void UpdateParticles(World w, Fixed frac, ThreeDRenderer.ViewInfo v, float dt)
@@ -379,7 +430,9 @@ namespace ManagedDoom.UnityPort
                     for (var i = 0; i < 8; i++)
                         Spawn(p, new UVec(Random.Range(-90F, 90F), Random.Range(-90F, 90F), Random.Range(20F, 150F)),
                               new Color(1F, Random.Range(0.55F, 0.85F), 0.25F, 1F), Random.Range(0.25F, 0.5F), 1.2F, floor, true);
+                    if (RekkrSettings.AnimImpacts) ImpactDetail(p, floor);
                 }
+                else if (RekkrSettings.AnimBlood) BloodDetail(p, floor);   // dev8 (replaces the additive red sparks)
                 else
                 {
                     for (var i = 0; i < 6; i++)
@@ -388,6 +441,13 @@ namespace ManagedDoom.UnityPort
                 }
             }
             seen.IntersectWith(alive);
+            // dev8: explosions found by the animation layer this tic
+            var anim = AnimFx.Current;
+            if (anim != null && RekkrSettings.AnimImpacts)
+            {
+                foreach (var e in anim.Explosions) ExplosionDetail(e);
+                anim.Explosions.Clear();
+            }
 
             // player splashes on liquid floors, embers above hot liquids near the player
             var pm = w.ConsolePlayer.Mobj;
@@ -435,10 +495,18 @@ namespace ManagedDoom.UnityPort
                 var q = particles[i];
                 q.Life -= dt;
                 if (q.Life <= 0) { particles.RemoveAt(i); continue; }
+                if (q.Rest) { particles[i] = q; continue; }   // dev8: a drop lying on the floor
                 if (!q.Rise) q.V.z -= 420F * dt;
                 else q.V.x += Mathf.Sin(Time.time * 3F + i) * 10F * dt;
+                if (q.Drag > 0) q.V *= Mathf.Max(0F, 1F - q.Drag * dt);
+                q.Size += q.Grow * dt;
                 q.P += q.V * dt;
-                if (q.P.z < q.Floor) { q.P.z = q.Floor; q.V *= 0.3F; q.V.z = -q.V.z * 0.35F; }
+                if (q.P.z < q.Floor)
+                {
+                    q.P.z = q.Floor;
+                    if (q.Stick) { q.V = UVec.zero; q.Rest = true; q.Size = Mathf.Min(q.Size * 1.3F, 3F); q.Stick = false; }   // rests on the floor
+                    else { q.V *= 0.3F; q.V.z = -q.V.z * 0.35F; }
+                }
                 particles[i] = q;
             }
         }
@@ -455,8 +523,10 @@ namespace ManagedDoom.UnityPort
             mat.SetPass(4);
             GL.Begin(GL.QUADS);
             var W = (float)rtH; var H = (float)rtW;   // frame columns, rows
+            var solids = 0;
             foreach (var q in particles)
             {
+                if (q.Solid) { solids++; continue; }
                 var dx = q.P.x - v.X; var dy = q.P.y - v.Y;
                 var zv = dx * ca + dy * sa;
                 if (zv < 6F) continue;
@@ -476,6 +546,31 @@ namespace ManagedDoom.UnityPort
             }
             DrawDrops(v, cx, cy, W, H, ca, sa);
             GL.End();
+            if (solids > 0)
+            {
+                // dev8: smoke / chips / blood alpha-blended (pass 6; pass 4 is additive light)
+                mat.SetPass(6);
+                GL.Begin(GL.QUADS);
+                foreach (var q in particles)
+                {
+                    if (!q.Solid) continue;
+                    var dx = q.P.x - v.X; var dy = q.P.y - v.Y;
+                    var zv = dx * ca + dy * sa;
+                    if (zv < 6F) continue;
+                    var xv = dx * sa - dy * ca;
+                    var yv = q.P.z - v.Z;
+                    var fx = cx + xv / zv * v.Projection;
+                    var fy = cy - yv / zv * v.Projection;
+                    var r = Mathf.Max(0.8F, q.Size / zv * v.Projection);
+                    var col = q.C; col.a *= Mathf.Clamp01(q.Life / (q.MaxLife * 0.4F));
+                    GL.Color(col);
+                    Corner(fy - r, fx - r, H, W, zv, 0, 0);
+                    Corner(fy + r, fx - r, H, W, zv, 1, 0);
+                    Corner(fy + r, fx + r, H, W, zv, 1, 1);
+                    Corner(fy - r, fx + r, H, W, zv, 0, 1);
+                }
+                GL.End();
+            }
             GL.PopMatrix();
             RenderTexture.active = prev;
         }

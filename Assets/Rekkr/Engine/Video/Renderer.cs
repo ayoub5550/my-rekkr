@@ -246,6 +246,18 @@ namespace ManagedDoom.Video
                         screen.LightData = new ushort[screen.Data.Length];
                         screen.GData = new byte[screen.Data.Length];
                     }
+                    // dev8: smooth liquid animation (true colour only): per-frame stamp + blend weight
+                    ThreeDRenderer.AnimFlats = AnimHooks.SmoothLiquids && ThreeDRenderer.TrueColor;
+                    if (ThreeDRenderer.AnimFlats)
+                    {
+                        if (screen.AnimTex == null || screen.AnimTex.Length != screen.Data.Length)
+                        {
+                            screen.AnimTex = new ushort[screen.Data.Length];
+                            screen.AnimBase = new byte[screen.Data.Length];
+                        }
+                        ThreeDRenderer.AnimStamp = ThreeDRenderer.AnimStamp % 255 + 1;
+                        animBlend = (uint)Math.Clamp((int)(game.World.Specials.AnimBlend(frameFrac.ToFloat()) * 256F), 0, 256);
+                    }
                     trueColorFrame = ThreeDRenderer.TrueColor;
                     ThreeDRenderer.ViewPitch = displayPlayer == consolePlayer ? LocalViewPitch : 0;
                     threeD.Render(displayPlayer, frameFrac,
@@ -374,6 +386,7 @@ namespace ManagedDoom.Video
         private Action<int> writeChunk;
         private readonly byte[][] colorMapRows;
         private bool trueColorFrame;
+        private uint animBlend;   // dev8: 0..256 weight of the next liquid picture
         private bool writeTrueColor;
         private (int x, int y, int w, int h) writeWindow;
 
@@ -416,11 +429,14 @@ namespace ManagedDoom.Video
             var h = screen.Height; var w = screen.Width;
             var (wx, wy, ww, wh) = writeWindow;
             var x0 = w * k / WriteChunks; var x1 = w * (k + 1) / WriteChunks;
-            fixed (byte* sd = screenData, tex = screen.TexData, band = bandFlat, gd = screen.GData)
+            var animOn = ThreeDRenderer.AnimFlats && screen.AnimTex != null;
+            var stamp = (uint)ThreeDRenderer.AnimStamp; var blendW = animBlend;
+            fixed (byte* sd = screenData, tex = screen.TexData, band = bandFlat, gd = screen.GData, abRaw = screen.AnimBase)
             fixed (bool* vp = validPair)
-            fixed (ushort* light = screen.LightData)
+            fixed (ushort* light = screen.LightData, atRaw = screen.AnimTex)
             fixed (uint* lit = litFlat, pal = colors)
             {
+                var at = animOn ? atRaw : null; var ab = abRaw;
                 for (var x = x0; x < x1; x++)
                 {
                     var col = x * h;
@@ -445,9 +461,20 @@ namespace ManagedDoom.Video
                         if (band[idx] != s || f == 0 || idx >= bandLimit) { p[i] = (pal[s] & 0xFFFFFFu) | alpha; continue; }
                         var a = lit[idx]; var b = lit[idx + 256];
                         var fa = 256u - f;
-                        p[i] = alpha
-                            | ((((a & 0xFF00FFu) * fa + (b & 0xFF00FFu) * f) >> 8) & 0xFF00FFu)
-                            | ((((a & 0xFF00u) * fa + (b & 0xFF00u) * f) >> 8) & 0xFF00u);
+                        var c1 = ((((a & 0xFF00FFu) * fa + (b & 0xFF00FFu) * f) >> 8) & 0xFF00FFu)
+                               | ((((a & 0xFF00u) * fa + (b & 0xFF00u) * f) >> 8) & 0xFF00u);
+                        if (at != null && (at[i] >> 8) == stamp && ab[i] == tex[i])
+                        {
+                            // dev8: cross-fade to the next picture of an animated flat (same light)
+                            var idx2 = (l >> 8 << 8) | (at[i] & 255);
+                            var a2 = lit[idx2]; var b2 = lit[idx2 + 256];
+                            var c2 = ((((a2 & 0xFF00FFu) * fa + (b2 & 0xFF00FFu) * f) >> 8) & 0xFF00FFu)
+                                   | ((((a2 & 0xFF00u) * fa + (b2 & 0xFF00u) * f) >> 8) & 0xFF00u);
+                            var w2 = blendW; var w1 = 256u - w2;
+                            c1 = ((((c1 & 0xFF00FFu) * w1 + (c2 & 0xFF00FFu) * w2) >> 8) & 0xFF00FFu)
+                               | ((((c1 & 0xFF00u) * w1 + (c2 & 0xFF00u) * w2) >> 8) & 0xFF00u);
+                        }
+                        p[i] = alpha | c1;
                     }
                     for (var i = yEnd; i < col + h; i++) p[i] = pal[sd[i]];
                 }

@@ -129,7 +129,7 @@ namespace ManagedDoom.Video
         private void ApplyShear()
         {
             var scale = Math.Max(1, screenHeight / 200);
-            var shear = ViewPitch * scale;
+            var shear = (int)MathF.Round((ViewPitch + AnimHooks.ViewPitch) * scale);   // dev8: fractional kick
             var lim = windowHeight / 2 - 2;
             if (shear > lim) shear = lim;
             if (shear < -lim) shear = -lim;
@@ -414,6 +414,13 @@ namespace ManagedDoom.Video
         // 0-199 solid depth code, 200-223 water, 224-235 murky liquid, 236-247 hot/toxic liquid,
         // 248 sky, 249 player weapon, 255 not 3D. Written only with true colour (tc) on.
         private byte[] gData;
+        private ushort[] animTex;   // dev8
+        private byte[] animBase;
+        private int[] flatNext;
+        /// <summary>my-rekkr dev8: liquid cross-fade on this frame + the frame's stamp (1..255).</summary>
+        public static float LastWeaponX, LastWeaponY;   // dev8 test probe
+        public static bool AnimFlats;
+        public static int AnimStamp;
         private byte curG;
         private byte[] ceilingG, floorG;
         private float projPx;
@@ -897,6 +904,9 @@ namespace ManagedDoom.Video
             viewAngle = localViewTurn.HasValue
                 ? player.Mobj.Angle + localViewTurn.Value      // my-rekkr smooth look
                 : player.GetInterpolatedAngle(frameFrac);
+            // my-rekkr dev8: camera shake / hit kick (visual only; the player's real angle and height are untouched)
+            if (AnimHooks.ViewDZ != 0) viewZ += Fixed.FromFloat(AnimHooks.ViewDZ);
+            if (AnimHooks.ViewYaw != 0) viewAngle += Angle.FromDegree(AnimHooks.ViewYaw);
 
             viewSin = Trig.Sin(viewAngle);
             viewCos = Trig.Cos(viewAngle);
@@ -912,6 +922,8 @@ namespace ManagedDoom.Video
 
             tc = TrueColor && screen.TexData != null;
             texData = screen.TexData;
+            animTex = AnimFlats ? screen.AnimTex : null; animBase = screen.AnimBase;
+            flatNext = animTex != null ? world.Specials.FlatTranslationNext : null;
             lightData = screen.LightData;
             gData = screen.GData;
             projPx = projection.Data / 65536F;
@@ -2241,6 +2253,14 @@ namespace ManagedDoom.Video
 
             var height = Fixed.Abs(ceilingHeight - viewZ);
             var flatData = flat.Data;
+            // dev8: the next picture of an animated flat (null = not animated / cross-fade off)
+            byte[] flatData2 = null;
+            if (animTex != null && tc)
+            {
+                var nf = flats[flatNext[sector.CeilingFlat]];
+                if (nf != flat) flatData2 = nf.Data;
+            }
+            var stampHi = AnimStamp << 8;
             var p1 = Math.Max(y1, ceilingPrevY1);
             var p2 = Math.Min(y2, ceilingPrevY2);
 
@@ -2269,7 +2289,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
 
@@ -2281,7 +2301,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = ceilingLights[y][ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)ceilingLightEnc[y]; gData[pos] = ceilingG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)ceilingLightEnc[y]; gData[pos] = ceilingG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
 
                     ceilingXFrac[y] = xFrac;
@@ -2309,7 +2329,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
             }
@@ -2338,7 +2358,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = ceilingG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
             }
@@ -2371,6 +2391,14 @@ namespace ManagedDoom.Video
 
             var height = Fixed.Abs(floorHeight - viewZ);
             var flatData = flat.Data;
+            // dev8: the next picture of an animated flat (null = not animated / cross-fade off)
+            byte[] flatData2 = null;
+            if (animTex != null && tc)
+            {
+                var nf = flats[flatNext[sector.FloorFlat]];
+                if (nf != flat) flatData2 = nf.Data;
+            }
+            var stampHi = AnimStamp << 8;
             var p1 = Math.Max(y1, floorPrevY1);
             var p2 = Math.Min(y2, floorPrevY2);
 
@@ -2399,7 +2427,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
 
@@ -2411,7 +2439,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = floorLights[y][ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)floorLightEnc[y]; gData[pos] = floorG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)floorLightEnc[y]; gData[pos] = floorG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
 
                     floorXFrac[y] = xFrac;
@@ -2439,7 +2467,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
             }
@@ -2468,7 +2496,7 @@ namespace ManagedDoom.Video
                     var spot = ((yFrac.Data >> (16 - 6)) & (63 * 64)) + ((xFrac.Data >> 16) & 63);
                     var ft = flatData[spot];
                     screenData[pos] = colorMap[ft];
-                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; }
+                    if (tc) { texData[pos] = ft; lightData[pos] = (ushort)lightEnc; gData[pos] = floorG[y]; if (flatData2 != null) { animTex[pos] = (ushort)(stampHi | flatData2[spot]); animBase[pos] = ft; } }
                     pos++;
                 }
             }
@@ -2779,6 +2807,7 @@ namespace ManagedDoom.Video
             var thingX = thing.GetInterpolatedX(frameFrac);
             var thingY = thing.GetInterpolatedY(frameFrac);
             var thingZ = thing.GetInterpolatedZ(frameFrac);
+            if (AnimHooks.PickupFloat && (thing.Flags & MobjFlags.Special) != 0) thingZ += Fixed.FromFloat(AnimHooks.PickupLift(thing));   // dev8
 
             // Transform the origin point.
             var trX = thingX - viewX;
@@ -2883,10 +2912,19 @@ namespace ManagedDoom.Video
 
             if (fixedColorMap == 0)
             {
-                if ((thing.Frame & 0x8000) == 0)
+                if (AnimHooks.HitFlash && thing.AnimFlash > 0.35F)
                 {
-                    vis.ColorMap = spriteLights[Math.Min(xScale.Data >> scaleLightShift, maxScaleLight - 1)];
-                    vis.Light = EncLight(curSpriteLevels, xScale.Data, scaleLightShift);
+                    // my-rekkr dev8: a short bright flash on the frame a monster is hit (visual only)
+                    vis.ColorMap = colorMap.FullBright;
+                    vis.Light = 0;
+                }
+                else if ((thing.Frame & 0x8000) == 0)
+                {
+                    var ls = xScale.Data;
+                    if (AnimHooks.PickupFloat && (thing.Flags & MobjFlags.Special) != 0)
+                        ls = (int)Math.Min(int.MaxValue / 2, ls * (1.0 + 1.6 * AnimHooks.PickupGlow(thing)));   // dev8: soft pulse
+                    vis.ColorMap = spriteLights[Math.Min(ls >> scaleLightShift, maxScaleLight - 1)];
+                    vis.Light = EncLight(curSpriteLevels, ls, scaleLightShift);
                 }
                 else
                 {
@@ -3113,9 +3151,10 @@ namespace ManagedDoom.Video
 
             var lump = spriteFrame.Patches[0];
             var flip = spriteFrame.Flip[0];
+            AnimHooks.WeaponPos(psp, frameFrac, out var pSx, out var pSy);   // my-rekkr dev8 (visual only)
 
             // Calculate edges of the shape.
-            var tx = psp.Sx - Fixed.FromInt(160);
+            var tx = pSx - Fixed.FromInt(160);
             tx -= Fixed.FromInt(lump.LeftOffset);
             var x1 = (centerXFrac + tx * weaponScale).Data >> Fixed.FracBits;
 
@@ -3138,7 +3177,7 @@ namespace ManagedDoom.Video
             var vis = weaponSprite;
             vis.MobjFlags = 0;
             // The code below is based on Crispy Doom's weapon rendering code.
-            vis.TextureAlt = Fixed.FromInt(100) + Fixed.One / 4 - (psp.Sy - Fixed.FromInt(lump.TopOffset));
+            vis.TextureAlt = Fixed.FromInt(100) + Fixed.One / 4 - (pSy - Fixed.FromInt(lump.TopOffset));
             vis.X1 = x1 < StripLeft ? StripLeft : x1;
             vis.X2 = x2 >= StripRight ? StripRight - 1 : x2;
             vis.Scale = weaponScale;
@@ -3225,8 +3264,9 @@ namespace ManagedDoom.Video
         {
             var frame = sprites[psp.State.Sprite].Frames[psp.State.Frame & 0x7fff];
             var lump = frame.Patches[0];
-            var tx = psp.Sx - Fixed.FromInt(160) - Fixed.FromInt(lump.LeftOffset);
-            var alt = Fixed.FromInt(100) + Fixed.One / 4 - (psp.Sy - Fixed.FromInt(lump.TopOffset));
+            AnimHooks.WeaponPos(psp, frameFrac, out var pSx, out var pSy);   // my-rekkr dev8
+            var tx = pSx - Fixed.FromInt(160) - Fixed.FromInt(lump.LeftOffset);
+            var alt = Fixed.FromInt(100) + Fixed.One / 4 - (pSy - Fixed.FromInt(lump.TopOffset));
             WeaponLayers[i] = new WeaponLayerInfo
             {
                 Patch = lump, Flip = frame.Flip[0], FullBright = (psp.State.Frame & 0x8000) != 0, Valid = true,
@@ -3275,6 +3315,12 @@ namespace ManagedDoom.Video
             {
                 var psp = player.PlayerSprites[i];
                 if (StripLeft == 0 && i < 2) WeaponLayers[i].Valid = false;
+                if (StripLeft == 0 && i == 0 && psp.State != null)
+                {
+                    // dev8 test probe: where the weapon is drawn this frame (scenario 12 smoothness metric)
+                    AnimHooks.WeaponPos(psp, frameFrac, out var wx, out var wy);
+                    LastWeaponX = wx.ToFloat(); LastWeaponY = wy.ToFloat();
+                }
                 if (psp.State != null)
                 {
                     // my-rekkr dev7: the GPU draws this layer in 3D (decided on the main thread before the render)

@@ -26,7 +26,7 @@ namespace ManagedDoom.UnityPort
     {
         private readonly GameContent content;
         private TextureAtlas atlas;
-        private Texture2D atlasTex, lookupTex, sectorTex, litPalTex;
+        private Texture2D atlasTex, lookupTex, sectorTex, litPalTex, lookupTex2;   // dev8: lookupTex2 = next picture
         private readonly Material worldMat, compMat;
         private Mesh level, things;
         private World curWorld;
@@ -38,7 +38,7 @@ namespace ManagedDoom.UnityPort
         private int levelIndicesVersion = -1;
         private uint[] litPalFor;
         private Color32[] sectorPixels;
-        private float[] lookupData;
+        private float[] lookupData, lookupData2;
 
         public int Triangles => geo?.Triangles ?? 0;
         public int ThingCount => thingBuilder?.Count ?? 0;
@@ -68,10 +68,13 @@ namespace ManagedDoom.UnityPort
             var lw = 256; var lh = (atlas.SlotCount + lw - 1) / lw;
             lookupTex = new Texture2D(lw, lh, TextureFormat.RGBAFloat, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "RemasterLookup" };
             lookupData = new float[lw * lh * 4];
+            lookupTex2 = new Texture2D(lw, lh, TextureFormat.RGBAFloat, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "RemasterLookupNext" };
+            lookupData2 = new float[lw * lh * 4];
             litPalTex = new Texture2D(256, 34, TextureFormat.RGBA32, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "RemasterLitPal" };
             worldMat.SetTexture("_Atlas", atlasTex);
             worldMat.SetVector("_AtlasSize", new Vector4(atlas.Width, atlas.Height, 1F / atlas.Width, 1F / atlas.Height));
             worldMat.SetTexture("_Lookup", lookupTex);
+            worldMat.SetTexture("_Lookup2", lookupTex2);
             worldMat.SetVector("_LookupSize", new Vector4(lw, lh, 1F / lw, 1F / lh));
             worldMat.SetTexture("_LitPal", litPalTex);
             Debug.Log($"[REKKR] remaster atlas {atlas.Width}x{atlas.Height} slots={atlas.SlotCount} {sw.ElapsedMilliseconds} ms");
@@ -161,6 +164,7 @@ namespace ManagedDoom.UnityPort
             foreach (var (start, count) in geo.DirtyRanges)
                 level.SetVertexBufferData(geo.Vertices, start, start, count, 0, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
             if (geo.IndicesVersion != levelIndicesVersion) SetLevelIndices();
+            curFrac = frac;   // dev8: the lookup cross-fade needs it
             UpdateLookup(world);
             UpdateSectors(world);
             var player = world.DisplayPlayer;
@@ -176,6 +180,12 @@ namespace ManagedDoom.UnityPort
             // ---- camera: view matrix in Unity world space (doom x, z, y), projection in window pixels
             float ca = Mathf.Cos(v.Angle), sa = Mathf.Sin(v.Angle);
             var fwd = new UVec(ca, 0, sa); var right = new UVec(sa, 0, -ca); var up = UVec.up;
+            if (AnimHooks.ViewRoll != 0)
+            {
+                // dev8: camera roll (strafe lean, off by default); the column renderer cannot roll, only Remaster
+                var rq = Quaternion.AngleAxis(AnimHooks.ViewRoll, fwd);
+                right = rq * right; up = rq * up;
+            }
             var eye = new UVec(v.X, v.Z, v.Y);
             var view = Matrix4x4.identity;
             view.SetRow(0, new Vector4(right.x, right.y, right.z, -UVec.Dot(right, eye)));
@@ -353,7 +363,8 @@ namespace ManagedDoom.UnityPort
             var turn = Mathf.DeltaAngle(lastViewAngleDeg, v.Angle * Mathf.Rad2Deg);
             lastViewAngleDeg = v.Angle * Mathf.Rad2Deg;
             weaponSway = Mathf.Lerp(weaponSway, Mathf.Clamp(turn * 0.6F, -2.5F, 2.5F), 0.15F);
-            var tilt = Quaternion.AngleAxis(-1.5F + weaponSway, UVec.up) * Quaternion.AngleAxis(2F, UVec.right);
+            var tilt = Quaternion.AngleAxis(-1.5F + weaponSway, UVec.up) * Quaternion.AngleAxis(2F, UVec.right)
+                     * Quaternion.AngleAxis(AnimHooks.WeaponRoll, UVec.forward);   // dev8 strafe tilt
             var calls = 0;
             for (var i = 0; i < 2; i++)
             {
@@ -609,14 +620,14 @@ namespace ManagedDoom.UnityPort
             m.SetColumn(1, new Vector4(0, 1, 0, 0) * e.Scale);
             m.SetColumn(2, new Vector4(-ca, 0, -sa, 0) * e.Scale);
             m.SetColumn(3, new Vector4(x, z, y, 1));
-            instances.Add((mesh, m, mo.Subsector.Sector.Number, (mo.Frame & 0x8000) != 0 ? 1F : 0F));
+            instances.Add((mesh, m, mo.Subsector.Sector.Number, ThingBuilder.AnimLight(mo, (mo.Frame & 0x8000) != 0)));
             return true;
         }
 
         private bool ReplaceThing(Mobj mo, Patch patch, bool flip, float x, float y, float bottom)
         {
             if ((mo.Flags & MobjFlags.Shadow) != 0) return false;      // spectres keep the fuzz billboard
-            if (TryVoxel(mo, x, y, mo.GetInterpolatedZ(curFrac).ToFloat())) return true;
+            if (TryVoxel(mo, x, y, mo.GetInterpolatedZ(curFrac).ToFloat() + AnimHooks.PickupLift(mo))) return true;
             if (RekkrSettings.RemasterThings != 1) return false;
             var slot = atlas.SpriteSlot(patch);
             if (slot < 0) return false;
@@ -638,7 +649,7 @@ namespace ManagedDoom.UnityPort
             m.SetColumn(1, new Vector4(0, 1, 0, 0));
             m.SetColumn(2, new Vector4(instCa, 0, instSa, 0));
             m.SetColumn(3, new Vector4(x, bottom, y, 1));
-            instances.Add((e.Mesh, m, mo.Subsector.Sector.Number, (mo.Frame & 0x8000) != 0 ? 1F : 0F));
+            instances.Add((e.Mesh, m, mo.Subsector.Sector.Number, ThingBuilder.AnimLight(mo, (mo.Frame & 0x8000) != 0)));
             return true;
         }
 
@@ -720,6 +731,24 @@ namespace ManagedDoom.UnityPort
             }
             lookupTex.SetPixelData(d, 0);
             lookupTex.Apply(false, false);
+            // dev8: the next picture of every animated slot, for the liquid / wall cross-fade
+            var blend = AnimHooks.SmoothLiquids ? world.Specials.AnimBlend(curFrac.ToFloat()) : 0F;
+            worldMat.SetFloat("_AnimBlend", blend);
+            if (blend > 0F)
+            {
+                var tn = world.Specials.TextureTranslationNext; var fn = world.Specials.FlatTranslationNext;
+                var d2 = lookupData2;
+                for (var i = 0; i < atlas.SlotCount; i++)
+                {
+                    var s = i;
+                    if (i < atlas.TextureCount) s = tn[i];
+                    else if (i < atlas.TextureCount + atlas.FlatCount) s = atlas.FlatSlot(fn[i - atlas.TextureCount]);
+                    var rc = r[s];
+                    d2[i * 4] = rc.X; d2[i * 4 + 1] = rc.Y; d2[i * 4 + 2] = rc.W; d2[i * 4 + 3] = rc.H;
+                }
+                lookupTex2.SetPixelData(d2, 0);
+                lookupTex2.Apply(false, false);
+            }
         }
 
         private void UpdateSectors(World world)
@@ -763,7 +792,7 @@ namespace ManagedDoom.UnityPort
             if (pointRt != null) { pointRt.Release(); UnityEngine.Object.Destroy(pointRt); }
             if (behind != null) { behind.Release(); UnityEngine.Object.Destroy(behind); }
             if (comp != null) { comp.Release(); UnityEngine.Object.Destroy(comp); }
-            foreach (var t in new UnityEngine.Object[] { atlasTex, lookupTex, sectorTex, litPalTex, level, things, worldMat, compMat })
+            foreach (var t in new UnityEngine.Object[] { atlasTex, lookupTex, lookupTex2, sectorTex, litPalTex, level, things, worldMat, compMat })
                 if (t != null) UnityEngine.Object.Destroy(t);
             cmd.Release();
         }

@@ -321,11 +321,13 @@ namespace ManagedDoom
             interpolate = true;
             oldViewZ = viewZ;
             oldAngle = mobj.Angle;
+            foreach (var psp in playerSprites) psp.UpdateFrameInterpolationInfo();   // my-rekkr dev8
         }
 
         public void DisableFrameInterpolationForOneFrame()
         {
             interpolate = false;
+            foreach (var psp in playerSprites) psp.OldState = null;   // my-rekkr dev8
         }
 
         public Fixed GetInterpolatedViewZ(Fixed frameFrac)

@@ -62,6 +62,7 @@ public sealed partial class RekkrApp
         else if (testScenario == 9) yield return Scenario9();   // dev7 save backup round trip
         else if (testScenario == 10) yield return Scenario10(); // dev7 Remaster: 3D weapon, light shadows, spectre, door/lift
         else if (testScenario == 11) yield return Scenario11(); // dev7 all 36 maps in Remaster, every effect on
+        else if (testScenario == 12) yield return Scenario12(); // dev8 animation
         else yield return Scenario1();
         FinishTestLoop();
     }
@@ -79,6 +80,7 @@ public sealed partial class RekkrApp
         settingsTab = 1; yield return Wait(1.4F); Shot("04_settings_motion"); yield return null;
         settingsTab = 2; yield return Wait(1.6F); Shot("05_settings_display"); yield return null;
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("05b_settings_graphics"); yield return null;
+        settingsTab = 4; animPage = 0; yield return Wait(1.2F); Shot("05c_settings_anim"); yield return null; settingsTab = 3;   // dev8
         gfxPage = 1; yield return Wait(1.4F); Shot("05c_settings_effects"); yield return null;
         gfxPage = 2; yield return Wait(1.4F); Shot("05d_settings_world"); yield return null;
         gfxPage = 3; RekkrSettings.Remaster = true; yield return Wait(1.4F); Shot("05e_settings_renderer"); yield return null;
@@ -158,6 +160,7 @@ public sealed partial class RekkrApp
         settingsTab = 1; yield return Wait(1.3F);
         settingsTab = 2; yield return Wait(1.5F); Shot("04_settings_ar_display"); yield return null;
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("04b_settings_ar_graphics"); yield return null;
+        settingsTab = 4; animPage = 1; yield return Wait(1.2F); Shot("04c_settings_ar_anim"); yield return null; settingsTab = 3;   // dev8
         gfxPage = 1; yield return Wait(1.4F); Shot("04c_settings_ar_effects"); yield return null;
         gfxPage = 2; yield return Wait(1.4F); Shot("04d_settings_ar_world"); yield return null;
         gfxPage = 3; RekkrSettings.Remaster = true; yield return Wait(1.4F); Shot("04e_settings_ar_renderer"); yield return null;

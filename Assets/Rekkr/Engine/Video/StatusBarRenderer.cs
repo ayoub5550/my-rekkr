@@ -332,11 +332,11 @@ namespace ManagedDoom.Video
             screen.DrawText("ARMOR", s * 62, s * 169, s);
             var h = new PercentWidget();
             h.NumberWidget.Patches = patches.TallNumbers; h.NumberWidget.Width = 3;
-            h.NumberWidget.X = 46; h.NumberWidget.Y = 179; h.Patch = patches.TallPercent;
+            h.NumberWidget.X = 46; h.NumberWidget.Y = 179 - AnimHooks.HudPopHealth; h.Patch = patches.TallPercent;   // dev8 pop
             DrawPercent(h, player.Health);
             var a = new PercentWidget();
             a.NumberWidget.Patches = patches.TallNumbers; a.NumberWidget.Width = 3;
-            a.NumberWidget.X = 98; a.NumberWidget.Y = 179; a.Patch = patches.TallPercent;
+            a.NumberWidget.X = 98; a.NumberWidget.Y = 179 - AnimHooks.HudPopArmor; a.Patch = patches.TallPercent;
             DrawPercent(a, player.ArmorPoints);
 
             screen.DrawPatch(patches.Faces[player.Mobj.World.StatusBar.FaceIndex], s * 118, s * 168, s);
@@ -357,7 +357,7 @@ namespace ManagedDoom.Video
             screen.DrawText("AMMO", s * 247 - screen.MeasureText("AMMO", s), s * 169, s);
             if (ammoType != AmmoType.NoAmmo)
             {
-                var n = new NumberWidget { Patches = patches.TallNumbers, Width = 3, X = 247, Y = 179 };
+                var n = new NumberWidget { Patches = patches.TallNumbers, Width = 3, X = 247, Y = 179 - AnimHooks.HudPopAmmo };
                 DrawNumber(n, player.Ammo[(int)ammoType]);
             }
         }

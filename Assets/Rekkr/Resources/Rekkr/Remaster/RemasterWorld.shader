@@ -11,6 +11,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
     {
         _Atlas ("Atlas", 2D) = "black" {}
         _Lookup ("Lookup", 2D) = "black" {}
+        _Lookup2 ("Lookup next", 2D) = "black" {}
         _Sectors ("Sectors", 2D) = "black" {}
         _LitPal ("LitPal", 2D) = "black" {}
         _MaskCull ("Mask cull", Float) = 2
@@ -20,6 +21,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
     #pragma target 3.5
     sampler2D _Atlas; float4 _AtlasSize;
     sampler2D _Lookup; float4 _LookupSize;
+    sampler2D _Lookup2; float _AnimBlend;   // dev8: next picture of animated slots + 0..1 cross-fade (0 = off)
     sampler2D _Sectors; float4 _SectorsSize;
     sampler2D _LitPal;
     float4 _View;     // doom x, y, z, angle
@@ -53,6 +55,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
         float4 sp : TEXCOORD4;                     // screen pos
         float3 wpos : TEXCOORD5;                   // unity world position
         nointerpolation float3 n : TEXCOORD6;      // surface normal (unity world)
+        nointerpolation float4 rect2 : TEXCOORD7;  // dev8: atlas rect of the next animation picture
     };
 
     float4 Slot(float s)
@@ -75,6 +78,12 @@ Shader "Rekkr/Remaster/RemasterWorld"
         o.uv = v.uv0.xy;
         float slot = v.uv0.z;
         o.rect = slot >= 0 ? Slot(slot) : float4(slot, 0, 1, 1);   // slot -3: voxel, palette index in u
+        o.rect2 = o.rect;
+        if (slot >= 0 && _AnimBlend > 0.001)
+        {
+            float2 c2 = float2(fmod(slot, _LookupSize.x), floor(slot / _LookupSize.x));
+            o.rect2 = tex2Dlod(_Lookup2, float4((c2 + 0.5) * _LookupSize.zw, 0, 0));
+        }
         float2 d = wp.xz - _View.xy;
         o.fz = d.x * cos(_View.w) + d.y * sin(_View.w);
         float kind = v.uv1.z;
@@ -211,7 +220,14 @@ Shader "Rekkr/Remaster/RemasterWorld"
         bool thing = kind > 3.5;
         bool fb = thing && i.info.z > 0.5 && i.info.z < 1.5;
         float row = LightRow(i.info.y, i.fz, flat, fb);
+        if (thing && i.info.z > 1.5 && i.info.z < 2.5) row = max(0, row - (i.info.z - 1.5) * 7.0);   // dev8 pickup glow
         float3 c = Lit(floor(t.r * 255.0 + 0.5), row);
+        if (_AnimBlend > 0.001 && any(i.rect2 != i.rect))
+        {
+            // dev8: animated flat / wall cross-fades into its next picture
+            float2 t2 = AtlasTexel(i.uv, i.rect2);
+            c = lerp(c, Lit(floor(t2.r * 255.0 + 0.5), row), _AnimBlend);
+        }
         float cls = flat ? fmod(i.info.z, 8.0) : 0;
         if (_SunDir.w > 0.5 && i.info.w > 0.5 && !fb) c *= SunLight(i.wpos, i.n, kind);
         if (_PLCount > 0.5 && !fb && _Light.y < 0.5)

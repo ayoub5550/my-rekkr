@@ -63,6 +63,41 @@ namespace ManagedDoom.UnityPort
         public static bool RemasterShadows = true; // dev6: sun shadow map in outdoor areas
         public static bool RemasterLightShadows = true; // dev7: the two nearest dynamic lights cast shadows (Remaster)
         public static int RemasterWeapon = 1;     // dev7: 0 original flat weapon, 1 3D (extruded) weapon (Remaster)
+        // dev8 animation (visual only). Style: 0 Classic (all off = original), 1 Modern (default), 2 Custom.
+        public static int AnimStyle = 1;
+        public static bool AnimSmoothWeapon = true;  // weapon moved every frame, not at 35 Hz
+        public static int AnimWeaponMotion = 1;      // sway / breathing / strafe tilt / landing: 0 off, 1 normal, 2 strong
+        public static bool AnimRecoil = true;        // per-weapon kick
+        public static bool AnimEaseSwitch = true;    // eased raise / lower
+        public static bool AnimLiquids = true;       // animated flats / walls cross-fade between frames
+        public static int AnimShake = 1;             // explosion / hit shake: 0 off, 1 normal, 2 strong
+        public static bool AnimHitKick = true;       // view kick away from a hit
+        public static bool AnimRoll;                 // camera lean when strafing (Remaster only, off by default)
+        public static bool AnimDamageDir = true;     // red marks towards the attacker
+        public static bool AnimPickups = true;       // pickups float + glow
+        public static bool AnimHitFlash = true;      // monsters flash when hit
+        public static bool AnimImpacts = true;       // chips / dust / smoke / debris (needs the particle system)
+        public static bool AnimBlood = true;         // richer blood
+        public static bool AnimUi = true;            // HUD number pops, panel / wheel transitions (not the touch buttons)
+
+        public static void ApplyAnimStyle(int style)
+        {
+            var on = style != 0;
+            AnimSmoothWeapon = AnimRecoil = AnimEaseSwitch = AnimLiquids = AnimHitKick = AnimDamageDir = on;
+            AnimPickups = AnimHitFlash = AnimImpacts = AnimBlood = AnimUi = on;
+            AnimWeaponMotion = on ? 1 : 0; AnimShake = on ? 1 : 0; AnimRoll = false;
+            AnimStyle = on ? 1 : 0;
+        }
+
+        public static int MatchAnimStyle()
+        {
+            bool all = AnimSmoothWeapon && AnimRecoil && AnimEaseSwitch && AnimLiquids && AnimHitKick && AnimDamageDir &&
+                       AnimPickups && AnimHitFlash && AnimImpacts && AnimBlood && AnimUi && AnimWeaponMotion == 1 && AnimShake == 1 && !AnimRoll;
+            bool none = !AnimSmoothWeapon && !AnimRecoil && !AnimEaseSwitch && !AnimLiquids && !AnimHitKick && !AnimDamageDir &&
+                        !AnimPickups && !AnimHitFlash && !AnimImpacts && !AnimBlood && !AnimUi && AnimWeaponMotion == 0 && AnimShake == 0 && !AnimRoll;
+            return all ? 1 : none ? 0 : 2;
+        }
+
         public static int DarkAreas = 1;         // dev6: 0 original sector light, 1 lifted, 2 bright (E3 has many light-0 rooms)
         public static readonly int[] DarkAreaFloor = { 0, 112, 144 };
 
@@ -189,6 +224,22 @@ namespace ManagedDoom.UnityPort
                 PlayerPrefs.SetInt("dev4_migrated", 1);
             }
             ManagedDoom.UnityPort.Gamepad.Load();   // dev7
+            // dev8 animation (new keys: Modern defaults)
+            AnimSmoothWeapon = PlayerPrefs.GetInt("an_smooth", 1) == 1;
+            AnimWeaponMotion = Mathf.Clamp(PlayerPrefs.GetInt("an_motion", 1), 0, 2);
+            AnimRecoil = PlayerPrefs.GetInt("an_recoil", 1) == 1;
+            AnimEaseSwitch = PlayerPrefs.GetInt("an_ease", 1) == 1;
+            AnimLiquids = PlayerPrefs.GetInt("an_liquids", 1) == 1;
+            AnimShake = Mathf.Clamp(PlayerPrefs.GetInt("an_shake", 1), 0, 2);
+            AnimHitKick = PlayerPrefs.GetInt("an_kick", 1) == 1;
+            AnimRoll = PlayerPrefs.GetInt("an_roll", 0) == 1;
+            AnimDamageDir = PlayerPrefs.GetInt("an_dmgdir", 1) == 1;
+            AnimPickups = PlayerPrefs.GetInt("an_pickups", 1) == 1;
+            AnimHitFlash = PlayerPrefs.GetInt("an_flash", 1) == 1;
+            AnimImpacts = PlayerPrefs.GetInt("an_impacts", 1) == 1;
+            AnimBlood = PlayerPrefs.GetInt("an_blood", 1) == 1;
+            AnimUi = PlayerPrefs.GetInt("an_ui", 1) == 1;
+            AnimStyle = MatchAnimStyle();
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -276,6 +327,20 @@ namespace ManagedDoom.UnityPort
             SetI("gfx_dark", DarkAreas);
             SetS("lang", Arabic ? "ar" : "en");
             ManagedDoom.UnityPort.Gamepad.Save(SetS, SetI);   // dev7
+            SetI("an_smooth", AnimSmoothWeapon ? 1 : 0);
+            SetI("an_motion", AnimWeaponMotion);
+            SetI("an_recoil", AnimRecoil ? 1 : 0);
+            SetI("an_ease", AnimEaseSwitch ? 1 : 0);
+            SetI("an_liquids", AnimLiquids ? 1 : 0);
+            SetI("an_shake", AnimShake);
+            SetI("an_kick", AnimHitKick ? 1 : 0);
+            SetI("an_roll", AnimRoll ? 1 : 0);
+            SetI("an_dmgdir", AnimDamageDir ? 1 : 0);
+            SetI("an_pickups", AnimPickups ? 1 : 0);
+            SetI("an_flash", AnimHitFlash ? 1 : 0);
+            SetI("an_impacts", AnimImpacts ? 1 : 0);
+            SetI("an_blood", AnimBlood ? 1 : 0);
+            SetI("an_ui", AnimUi ? 1 : 0);
             foreach (var c in Editable)
             {
                 if (Layout.TryGetValue(c, out var v))

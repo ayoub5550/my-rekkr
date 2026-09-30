@@ -6,6 +6,7 @@
 // Pass 2: downsample (4 taps) for depth of field
 // Pass 3: composite (world + rays + DoF), alpha = G-buffer code kept for later passes
 // Pass 4: particles + dev7 3D weather (quads in frame space, depth-tested against the G-buffer)
+// Pass 6: dev8 solid particles (smoke, chips, debris, blood): alpha-blended, G-buffer alpha kept
 Shader "Rekkr/World"
 {
     Properties
@@ -413,6 +414,34 @@ Shader "Rekkr/World"
                     acc += float4(s.rgb * w, w);
                 }
                 return acc * 0.25;
+            }
+            ENDCG
+        }
+        Pass // 6 dev8 solid particles: like pass 4 but alpha-blended (dark smoke / chips / blood); dst alpha kept
+        {
+            Blend One OneMinusSrcAlpha, Zero One
+            CGPROGRAM
+            #pragma vertex pvert
+            #pragma fragment pfrag
+            struct pin { float4 vertex : POSITION; float4 color : COLOR; float3 uv : TEXCOORD0; };
+            struct pv2f { float4 pos : SV_POSITION; float4 col : COLOR; float3 uv : TEXCOORD0; float4 sp : TEXCOORD1; };
+            pv2f pvert(pin v)
+            {
+                pv2f o; o.pos = UnityObjectToClipPos(v.vertex); o.col = v.color; o.uv = v.uv;
+                o.sp = ComputeScreenPos(o.pos);
+                return o;
+            }
+            float4 pfrag(pv2f i) : SV_Target
+            {
+                float2 suv = i.sp.xy / i.sp.w;
+                int code = CodeOf(FetchG(suv.y * _Frame.x, suv.x * _Frame.y).a);
+                if (code >= 249) discard;
+                if (code < 248 && ZOf(code) < i.uv.x) discard;   // behind geometry
+                float2 q = i.uv.yz * 2.0 - 1.0;
+                float m = saturate(1.0 - dot(q, q));
+                m = m * m * (3.0 - 2.0 * m);                      // soft round edge
+                float a = saturate(i.col.a * m);
+                return float4(i.col.rgb * a, a);
             }
             ENDCG
         }

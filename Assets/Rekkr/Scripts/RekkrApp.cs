@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.7.0";
+    public const string Version = "0.8.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
@@ -35,6 +35,8 @@ public sealed partial class RekkrApp : MonoBehaviour
     private Material screenMat;
     private PostFx postFx;
     private WorldFx worldFx;   // dev5
+    private readonly AnimFx animFx = new AnimFx();   // dev8 animation layer (visual only)
+    public AnimFx Anim => animFx;
     private GpuRenderer gpu;   // dev6 Remaster
     private bool postThisFrame;
     private Texture2D texBtn, texBtnPressed, texStickBase, texStickKnob, texWhite;
@@ -257,6 +259,25 @@ public sealed partial class RekkrApp : MonoBehaviour
         return p.PlayerState == PlayerState.Live && p.Mobj != null;
     }
 
+    /// <summary>dev8: the level world on screen (live game, demo, title demo; also under the automap).</summary>
+    private DoomGame AnimGame()
+    {
+        if (Doom == null) return null;
+        DoomGame g = null;
+        if (Doom.State == DoomState.Game) g = Doom.Game;
+        else if (Doom.State == DoomState.DemoPlayback) g = Doom.DemoPlayback.Game;
+        else if (Doom.State == DoomState.Opening && Doom.Opening.State == OpeningSequenceState.Demo) g = Doom.Opening.DemoGame;
+        return g != null && g.State == GameState.Level ? g : null;
+    }
+
+    /// <summary>dev8: the player's own motion drives the springs only in a live game with no menu / panel.</summary>
+    private bool AnimLive()
+    {
+        if (freezeWorld || !InLevel || settingsOpen || Doom.Menu.Active || Doom.Game.Paused || Doom.Game.World.AutoMap.Visible) return false;
+        var p = Doom.Game.World.ConsolePlayer;
+        return p.PlayerState == PlayerState.Live && p.Mobj != null;
+    }
+
     public bool InLevel => Doom != null && Doom.State == DoomState.Game && Doom.Game.State == GameState.Level;
     public bool CanContinue => canContinue;
 
@@ -295,6 +316,8 @@ public sealed partial class RekkrApp : MonoBehaviour
             ThreeDRenderer.FreeLookSky = RekkrSettings.FreeLook;
             ThreeDRenderer.MinSectorLight = RekkrSettings.DarkAreaFloor[RekkrSettings.DarkAreas];   // dev6 "dark areas"
             video.LocalViewPitch = RekkrSettings.FreeLook && InLevel ? input.PitchInt : 0;
+            // dev8: animation offsets for this frame (weapon sway / recoil, camera shake / kick, pickups, flashes)
+            animFx.Frame(AnimGame(), AnimLive(), video.LocalViewPitch, freezeWorld ? 0F : Math.Min(Time.unscaledDeltaTime, 0.1F));
             // dev6 Remaster: the GPU draws the 3D world of the level on screen (game, demo, title demo);
             // the software renderer still draws the 2D (HUD, menus, weapon) and wipes.
             var levelGame = RekkrSettings.Remaster && RekkrSettings.RemasterAllowed && !Doom.Wiping ? GpuRenderer.LevelGame(Doom) : null;
@@ -579,6 +602,7 @@ public sealed partial class RekkrApp : MonoBehaviour
     public void ToggleSettings()
     {
         settingsOpen = !settingsOpen;
+        if (settingsOpen) settingsOpenTime = Time.unscaledTime;   // dev8 open transition
         if (!settingsOpen) { input.EditMode = false; SaveSettings(); }
     }
 }

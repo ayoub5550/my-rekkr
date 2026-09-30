@@ -370,6 +370,11 @@ namespace ManagedDoom
             world.ThingAllocation.RemoveMobj(this);
         }
 
+        /// <summary>my-rekkr dev8: hit-flash strength 0..1 (render only, never saved or read by the sim).</summary>
+        public float AnimFlash;
+        /// <summary>my-rekkr dev8: health seen by the animation layer at the previous tic.</summary>
+        public int AnimLastHealth = int.MinValue;
+
         public override void UpdateFrameInterpolationInfo()
         {
             interpolate = true;

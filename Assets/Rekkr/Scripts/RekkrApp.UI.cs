@@ -56,7 +56,10 @@ public sealed partial class RekkrApp
                 GUI.color = Color.white;
             }
             DrawCrosshair();
+            DrawDamageMarks();   // dev8
             DrawControls();
+            if (input.WheelOpen && !wheelWasOpen) wheelOpenTime = Time.unscaledTime;   // dev8 wheel pop-in
+            wheelWasOpen = input.WheelOpen;
             if (input.WheelOpen && !settingsOpen) DrawWheel();
             if (input.TitleMode && !settingsOpen)
             {
@@ -203,6 +206,64 @@ public sealed partial class RekkrApp
         return tex;
     }
 
+    private bool wheelWasOpen;
+    private float wheelOpenTime, settingsOpenTime;
+
+    /// <summary>dev8 UI animation: 0..1 progress of an opening transition (1 at once when UI animation is off).</summary>
+    private static float UiT(float since, float dur) => RekkrSettings.AnimUi ? Mathf.Clamp01((Time.unscaledTime - since) / dur) : 1F;
+
+    private static float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158F, c3 = c1 + 1F;
+        var u = t - 1F;
+        return 1F + c3 * u * u * u + c1 * u * u;
+    }
+
+    private Texture2D texDamageArc;
+
+    /// <summary>dev8: red marks at the screen edge towards whoever hit the player (fade in about a second).</summary>
+    private void DrawDamageMarks()
+    {
+        var marks = animFx.Marks;
+        if (marks.Count == 0 || !RekkrSettings.AnimDamageDir || !InLevel || settingsOpen || input.EditMode) return;
+        if (Doom.Menu.Active || Doom.Game.World.AutoMap.Visible) return;
+        if (texDamageArc == null)
+        {
+            const int w = 128, h = 32;
+            texDamageArc = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[w * h];
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    var u = x / (w - 1F) * 2F - 1F;
+                    // a thin crescent: brightest along a curve that bows towards the screen edge (top of the texture)
+                    var curve = 0.72F - 0.45F * u * u;
+                    var d = Mathf.Abs(y / (h - 1F) - curve);
+                    var a = Mathf.Clamp01(1F - d * 5F) * Mathf.Clamp01(1F - u * u);
+                    px[y * w + x] = new Color32(255, 40, 25, (byte)(a * 255));
+                }
+            texDamageArc.SetPixels32(px); texDamageArc.Apply(false, true);
+        }
+        float H = Screen.height;
+        var c = gameRect.center;
+        var R = H * 0.3F;
+        var view = ManagedDoom.Video.ThreeDRenderer.LastView.Angle;
+        var saved = GUI.matrix;
+        foreach (var m in marks)
+        {
+            var rel = Mathf.DeltaAngle(view * Mathf.Rad2Deg, m.Angle * Mathf.Rad2Deg);   // + = left of the view
+            var r = rel * Mathf.Deg2Rad;
+            var pos = c + new Vector2(-Mathf.Sin(r), -Mathf.Cos(r)) * R;
+            GUI.matrix = saved;
+            GUIUtility.RotateAroundPivot(-rel, pos);
+            GUI.color = new Color(1, 1, 1, Mathf.Clamp01(m.Life * 1.4F) * 0.85F);
+            var w2 = H * 0.36F; var h2 = H * 0.09F;
+            GUI.DrawTexture(new Rect(pos.x - w2 / 2, pos.y - h2 / 2, w2, h2), texDamageArc);
+        }
+        GUI.matrix = saved;
+        GUI.color = Color.white;
+    }
+
     private void DrawWheel()
     {
         float H = Screen.height;
@@ -210,9 +271,12 @@ public sealed partial class RekkrApp
         var n = items.Count;
         if (n == 0) return;
         var c = gameRect.center;
-        var R = H * 0.27F;
-        var cell = H * 0.19F;
-        GUI.color = new Color(0, 0, 0, 0.45F);
+        // dev8: the wheel opens with a quick scale-up (ease-out-back) and fade
+        var t = UiT(wheelOpenTime, 0.16F);
+        var grow = 0.72F + 0.28F * EaseOutBack(t);
+        var R = H * 0.27F * grow;
+        var cell = H * 0.19F * grow;
+        GUI.color = new Color(0, 0, 0, 0.45F * t);
         GUI.DrawTexture(new Rect(c.x - R - cell * 0.7F, c.y - R - cell * 0.7F, 2 * (R + cell * 0.7F), 2 * (R + cell * 0.7F)), texStickBase);
         GUI.color = Color.white;
         for (var i = 0; i < n; i++)
@@ -223,7 +287,7 @@ public sealed partial class RekkrApp
             var usable = input.WheelUsable[i];
             var sz = sel ? cell * 1.18F : cell;
             var r = new Rect(pos.x - sz / 2, pos.y - sz / 2, sz, sz);
-            GUI.color = new Color(1, 1, 1, usable ? 1F : 0.45F);
+            GUI.color = new Color(1, 1, 1, (usable ? 1F : 0.45F) * t);
             GUI.DrawTexture(r, sel ? texBtnPressed : texBtn);
             var icon = WeaponIcon(items[i]);
             if (icon != null)
@@ -339,22 +403,30 @@ public sealed partial class RekkrApp
     {
         float W = Screen.width, H = Screen.height;
         panel = new Rect(W * 0.1F, H * 0.035F, W * 0.8F, H * 0.93F);
-        GUI.color = new Color(0, 0, 0, 0.78F);
+        // dev8: the panel opens with a short fade + settle (scale 0.94 -> 1, ease-out); off with UI animation off
+        var t = UiT(settingsOpenTime, 0.18F);
+        GUI.color = new Color(0, 0, 0, 0.78F * t);
         GUI.DrawTexture(new Rect(0, 0, W, H), texWhite);
         GUI.color = Color.white;
+        if (t < 1F)
+        {
+            var e = 1F - (1F - t) * (1F - t) * (1F - t);
+            var k = 0.94F + 0.06F * e;
+            GUIUtility.ScaleAroundPivot(new Vector2(k, k), new Vector2(W / 2, H / 2));
+        }
         skin.Frame(skin.Panel, panel);
 
         skin.Text(new Rect(panel.x, panel.y + H * 0.035F, panel.width, H * 0.07F), Loc.T("settings"), PxTitle, TextAnchor.MiddleCenter, Ink.Red);
 
         // Tabs (right-to-left order in Arabic).
-        string[] tabs = { Loc.T("tab_controls"), Loc.T("tab_motion"), Loc.T("tab_display"), Loc.T("tab_graphics") };
+        string[] tabs = { Loc.T("tab_controls"), Loc.T("tab_motion"), Loc.T("tab_display"), Loc.T("tab_graphics"), Loc.T("tab_anim") };
         var inner = panel.width - W * 0.07F;
-        var tw = inner / 4F;
-        for (var i = 0; i < 4; i++)
+        var tw = inner / tabs.Length;   // dev8: 5 tabs
+        for (var i = 0; i < tabs.Length; i++)
         {
-            var slot = Loc.Arabic ? 3 - i : i;
+            var slot = Loc.Arabic ? tabs.Length - 1 - i : i;
             var tr = new Rect(panel.x + W * 0.035F + slot * tw + W * 0.004F, panel.y + H * 0.115F, tw - W * 0.008F, H * 0.078F);
-            if (Plate(tr, tabs[i], settingsTab == i, PxSmall)) { settingsTab = i; controlsPage = 0; gfxPage = 0; displayPage = 0; }
+            if (Plate(tr, tabs[i], settingsTab == i, PxSmall)) { settingsTab = i; controlsPage = 0; gfxPage = 0; displayPage = 0; animPage = 0; }
         }
 
         rowY = panel.y + H * 0.215F;
@@ -365,12 +437,14 @@ public sealed partial class RekkrApp
             case 0: DrawControlsTab(ref footer); break;
             case 1: DrawMotionTab(); break;
             case 2: DrawDisplayTab(); break;
-            default: DrawGraphicsTab(); break;
+            case 3: DrawGraphicsTab(); break;
+            default: DrawAnimationTab(ref footer); break;   // dev8
         }
 
         var done = new Rect(panel.center.x - W * 0.08F, panel.yMax - H * 0.135F, W * 0.16F, H * 0.08F);
         if (Plate(done, Loc.T("done"), true, PxRow)) ToggleSettings();
         skin.Text(new Rect(panel.x + W * 0.03F, panel.yMax - H * 0.058F, panel.width - W * 0.06F, H * 0.03F), footer, PxHint, TextAnchor.MiddleCenter, Ink.Dim);
+        GUI.matrix = Matrix4x4.identity;   // dev8: undo the open transition scale
     }
 
     /// <summary>Bottom corner button (page switch) on the leading side, left of DONE.</summary>
@@ -591,6 +665,57 @@ public sealed partial class RekkrApp
             if (!RekkrSettings.FxLighting) Hint(Loc.T("fx_needs_light"));
             if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) gfxPage = 0;
         }
+    }
+
+    // dev8: ANIMATION tab (3 pages of at most 6 rows). Everything here is visual only.
+    private int animPage;
+
+    private bool AnimToggle(string key, bool v)
+    {
+        var n = Toggle(Loc.T(key), v);
+        return n;
+    }
+
+    private int AnimLevel(string key, int v)
+    {
+        if (Cycle(Loc.T(key), Loc.T("an_lvl_" + v))) v = (v + 1) % 3;
+        return v;
+    }
+
+    private void DrawAnimationTab(ref string footer)
+    {
+        var next = Loc.Arabic ? "< " + Loc.T("gfx_next") : Loc.T("gfx_next") + " >";
+        footer = Loc.T("an_hint");
+        if (animPage == 0)
+        {
+            var st = RekkrSettings.AnimStyle;
+            if (Cycle(Loc.T("an_style"), Loc.T("an_style_" + st))) RekkrSettings.ApplyAnimStyle(st == 1 ? 0 : 1);   // Classic <-> Modern
+            RekkrSettings.AnimSmoothWeapon = AnimToggle("an_smooth", RekkrSettings.AnimSmoothWeapon);
+            RekkrSettings.AnimWeaponMotion = AnimLevel("an_motion", RekkrSettings.AnimWeaponMotion);
+            RekkrSettings.AnimRecoil = AnimToggle("an_recoil", RekkrSettings.AnimRecoil);
+            RekkrSettings.AnimEaseSwitch = AnimToggle("an_ease", RekkrSettings.AnimEaseSwitch);
+            RekkrSettings.AnimLiquids = AnimToggle("an_liquids", RekkrSettings.AnimLiquids);
+            if (CornerButton(next)) animPage = 1;
+        }
+        else if (animPage == 1)
+        {
+            RekkrSettings.AnimShake = AnimLevel("an_shake", RekkrSettings.AnimShake);
+            RekkrSettings.AnimHitKick = AnimToggle("an_kick", RekkrSettings.AnimHitKick);
+            RekkrSettings.AnimDamageDir = AnimToggle("an_dmgdir", RekkrSettings.AnimDamageDir);
+            if (RekkrSettings.RemasterAllowed) RekkrSettings.AnimRoll = AnimToggle("an_roll", RekkrSettings.AnimRoll);
+            RekkrSettings.AnimPickups = AnimToggle("an_pickups", RekkrSettings.AnimPickups);
+            RekkrSettings.AnimHitFlash = AnimToggle("an_flash", RekkrSettings.AnimHitFlash);
+            if (CornerButton(next)) animPage = 2;
+        }
+        else
+        {
+            RekkrSettings.AnimImpacts = AnimToggle("an_impacts", RekkrSettings.AnimImpacts);
+            RekkrSettings.AnimBlood = AnimToggle("an_blood", RekkrSettings.AnimBlood);
+            RekkrSettings.AnimUi = AnimToggle("an_ui", RekkrSettings.AnimUi);
+            if ((RekkrSettings.AnimImpacts || RekkrSettings.AnimBlood) && !(RekkrSettings.Particles && RekkrSettings.FxLighting)) Hint(Loc.T("an_needs_particles"));
+            if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) animPage = 0;
+        }
+        RekkrSettings.AnimStyle = RekkrSettings.MatchAnimStyle();
     }
 
     private void MarkCustom()

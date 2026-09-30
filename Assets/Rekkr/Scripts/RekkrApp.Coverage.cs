@@ -68,6 +68,7 @@ public sealed partial class RekkrApp
         RekkrSettings.DarkAreas = 1;
         RekkrSettings.RemasterThings = 1; RekkrSettings.RemasterShadows = false;
         RekkrSettings.DynLightLevel = 1;
+        RekkrSettings.ApplyAnimStyle(0);   // dev8: animation off = deterministic A/B frames
     }
 
     private static readonly CoverToggle[] CoverToggles =

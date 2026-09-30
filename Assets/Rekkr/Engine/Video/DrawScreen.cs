@@ -36,7 +36,10 @@ namespace ManagedDoom.Video
         /// levels) of each 3D-view pixel, written next to the classic palette index. Null when off.</summary>
         public byte[] TexData;
         public ushort[] LightData;
-        public byte[] GData;   // my-rekkr dev5 G-buffer (alpha codes)
+        public byte[] GData;
+        // my-rekkr dev8 liquid cross-fade: (stamp << 8 | next texel) and the texel it pairs with, per pixel
+        public ushort[] AnimTex;
+        public byte[] AnimBase;   // my-rekkr dev5 G-buffer (alpha codes)
 
         public DrawScreen(Wad wad, int width, int height)
         {

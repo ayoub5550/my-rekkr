@@ -57,10 +57,12 @@ namespace ManagedDoom.Remaster
                 var slot = atlas.SpriteSlot(patch);
                 if (slot < 0) continue;
                 var z = mo.GetInterpolatedZ(frac).ToFloat();
+                var lift = Video.AnimHooks.PickupLift(mo);   // my-rekkr dev8: floating pickups (visual only)
+                z += lift;
                 var top = z + patch.TopOffset;
                 var bottom = top - patch.Height;
                 var floor = mo.Subsector.Sector.GetInterpolatedFloorHeight(frac).ToFloat();
-                if (bottom < floor && z <= floor + 0.5F && floor - bottom <= MaxLift) { top += floor - bottom; bottom = floor; }
+                if (bottom < floor && z - lift <= floor + 0.5F && floor - bottom <= MaxLift) { top += floor - bottom; bottom = floor; }
                 var fullBright = (mo.Frame & 0x8000) != 0;
                 var fuzz = (mo.Flags & MobjFlags.Shadow) != 0;
                 if (Replace != null && Replace(mo, patch, flip, x, y, bottom)) { Count++; continue; }
@@ -69,7 +71,7 @@ namespace ManagedDoom.Remaster
                 Ensure(4, 6);
                 var v = VertexCount;
                 var sector = mo.Subsector.Sector.Number;
-                var light = fullBright ? 1F : 0F;
+                var light = AnimLight(mo, fullBright);
                 var kind = fuzz ? RKind.Fuzz : RKind.Thing;
                 Vertices[v + 0] = new RVertex { X = x + rx * x0, Y = bottom, Z = y + ry * x0, U = u0, V = patch.Height, Tex = slot, Sector = sector, Kind = kind, Light = light, Nx = -ca, Nz = -sa };
                 Vertices[v + 1] = new RVertex { X = x + rx * x0, Y = top, Z = y + ry * x0, U = u0, V = 0, Tex = slot, Sector = sector, Kind = kind, Light = light, Nx = -ca, Nz = -sa };
@@ -82,6 +84,14 @@ namespace ManagedDoom.Remaster
             }
             FuzzIndexStart = IndexCount;
             foreach (var q in fuzzQuads) AddQuad(q);
+        }
+
+        /// <summary>dev8: vertex light flag: 1 full bright (or hit flash), 1.5..2.5 pickup glow, 0 sector light.</summary>
+        public static float AnimLight(Mobj mo, bool fullBright)
+        {
+            if (fullBright || (Video.AnimHooks.HitFlash && mo.AnimFlash > 0.35F)) return 1F;
+            var g = Video.AnimHooks.PickupGlow(mo);
+            return g > 0.02F ? 1.5F + g * 0.98F : 0F;
         }
 
         private void AddQuad(int v)

@@ -26,12 +26,25 @@ namespace ManagedDoom
         private Fixed sx;
         private Fixed sy;
 
+        // my-rekkr dev8: the values at the start of the current tic (render-side interpolation only;
+        // not saved, never read by the simulation).
+        public Fixed OldSx, OldSy;
+        public MobjStateDef OldState;
+        public Sprite OldSprite;
+
+        public void UpdateFrameInterpolationInfo()
+        {
+            OldSx = sx; OldSy = sy; OldState = state;
+            OldSprite = state != null ? state.Sprite : default;
+        }
+
         public void Clear()
         {
             state = null;
             tics = 0;
             sx = Fixed.Zero;
             sy = Fixed.Zero;
+            OldState = null;
         }
 
         public MobjStateDef State
