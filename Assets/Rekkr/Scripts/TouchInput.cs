@@ -308,6 +308,51 @@ namespace ManagedDoom.UnityPort
             }
 
             PollKeyboard();
+            PollGamepad(settingsOpen);
+        }
+
+        // ----------------------------------------------------------------- dev7 gamepad
+        private float padTurn;          // Doom angle units accumulated this tic (like gyroRadians)
+        private float padMenuRepeat;
+        private int padMenuDir;
+
+        private void PollGamepad(bool settingsOpen)
+        {
+            Gamepad.Poll();
+            if (Gamepad.Capturing) { Gamepad.UpdateCapture(); return; }
+            if (!Gamepad.Connected) return;
+            var inMenu = MenuMode || TitleMode || app.Doom.Menu.Active || !app.InLevel;
+            if (settingsOpen || EditMode) return;
+            if (inMenu)
+            {
+                // d-pad / left stick = arrows with auto-repeat, A = enter, B / Start = back
+                var mv = Gamepad.Move;
+                var dir = mv.y > 0.5F ? 1 : mv.y < -0.5F ? 2 : mv.x < -0.5F ? 3 : mv.x > 0.5F ? 4 : 0;
+                var key = dir == 1 ? DoomKey.Up : dir == 2 ? DoomKey.Down : dir == 3 ? DoomKey.Left : DoomKey.Right;
+                if (dir != padMenuDir)
+                {
+                    padMenuDir = dir;
+                    if (dir != 0) { SendKey(key); padMenuRepeat = 0.35F; }   // first step, then auto-repeat
+                }
+                else if (dir != 0 && (padMenuRepeat -= Time.unscaledDeltaTime) <= 0) { SendKey(key); padMenuRepeat = 0.12F; }
+                if (Input.GetKeyDown(KeyCode.JoystickButton0)) SendKey(DoomKey.Enter);
+                if (Input.GetKeyDown(KeyCode.JoystickButton1) || Gamepad.Down(PadAction.Menu)) SendKey(DoomKey.Escape);
+                return;
+            }
+            // in game: look stick turns (speed setting, ~200 deg/s at 5) and pitches
+            var look = Gamepad.Look;
+            var degPerSec = 40F * Gamepad.LookSpeed;
+            padTurn -= look.x * degPerSec * Time.unscaledDeltaTime * (65536F / 360F);
+            if (RekkrSettings.FreeLook && Mathf.Abs(look.y) > 0)
+            {
+                var y = Gamepad.InvertLookY ^ RekkrSettings.InvertLook ? -look.y : look.y;
+                AddPitch(y * degPerSec * 0.6F * Time.unscaledDeltaTime * PitchUnitsPerDegree);
+            }
+            if (Gamepad.Down(PadAction.WeaponNext)) weaponRequest = NextWeapon(1);
+            if (Gamepad.Down(PadAction.WeaponPrev)) weaponRequest = NextWeapon(-1);
+            if (Gamepad.Down(PadAction.Run)) SetRun(!runToggle);
+            if (Gamepad.Down(PadAction.Map)) SendKey(DoomKey.Tab);
+            if (Gamepad.Down(PadAction.Menu)) SendKey(DoomKey.Escape);
         }
 
         private float gyroRadians;
@@ -662,8 +707,7 @@ namespace ManagedDoom.UnityPort
             (KeyCode.UpArrow, DoomKey.Up), (KeyCode.DownArrow, DoomKey.Down), (KeyCode.LeftArrow, DoomKey.Left),
             (KeyCode.RightArrow, DoomKey.Right), (KeyCode.Return, DoomKey.Enter), (KeyCode.Escape, DoomKey.Escape),
             (KeyCode.Tab, DoomKey.Tab), (KeyCode.Y, DoomKey.Y), (KeyCode.N, DoomKey.N), (KeyCode.Backspace, DoomKey.Backspace),
-            (KeyCode.JoystickButton0, DoomKey.Enter), (KeyCode.JoystickButton1, DoomKey.Escape), (KeyCode.JoystickButton7, DoomKey.Escape),
-        };
+        };   // dev7: gamepad buttons are handled in PollGamepad (menus: A = enter, B/Start = back; game: bindings)
 
         private void PollKeyboard()
         {
@@ -695,7 +739,7 @@ namespace ManagedDoom.UnityPort
         {
             get
             {
-                var turn = -turnPixels * SwipeUnitsPerPixel + turnCarry + gyroRadians * GyroUnitsPerRadian;
+                var turn = -turnPixels * SwipeUnitsPerPixel + turnCarry + gyroRadians * GyroUnitsPerRadian + padTurn;
                 var units = Mathf.Clamp(Mathf.RoundToInt(turn), -32000, 32000);
                 return new Angle((uint)(units << 16));
             }
@@ -730,6 +774,10 @@ namespace ManagedDoom.UnityPort
             if (Input.GetKey(KeyCode.D)) kx += 1;
             forward += Mathf.RoundToInt(ky * PlayerBehavior.ForwardMove[speed]);
             side += Mathf.RoundToInt(kx * PlayerBehavior.SideMove[speed]);
+            // dev7 gamepad move stick (analog)
+            var pm = Gamepad.Capturing ? Vector2.zero : Gamepad.Move;
+            forward += Mathf.RoundToInt(pm.y * PlayerBehavior.ForwardMove[speed] * 1.05F);
+            side += Mathf.RoundToInt(pm.x * PlayerBehavior.SideMove[speed] * 1.1F);
             if (Input.GetKey(KeyCode.Q)) cmd.AngleTurn += (short)PlayerBehavior.AngleTurn[speed];
             if (Input.GetKey(KeyCode.E)) cmd.AngleTurn -= (short)PlayerBehavior.AngleTurn[speed];
             LastTicKeyTurn = cmd.AngleTurn != 0;
@@ -742,12 +790,14 @@ namespace ManagedDoom.UnityPort
             // Gyro: radians -> Doom angle units (65536 per turn) x sensitivity (4 = 1:1).
             turn += gyroRadians * (65536F / (2F * Mathf.PI)) * (RekkrSettings.GyroSensitivity / 4F);
             gyroRadians = 0;
+            turn += padTurn; padTurn = 0;   // dev7 gamepad look stick
             var turnInt = Mathf.Clamp(Mathf.RoundToInt(turn), -32000, 32000);
             turnCarry = turn - turnInt;
             cmd.AngleTurn += (short)turnInt;
 
-            if (buttons[Ctl.Fire].Held || Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.JoystickButton5)) cmd.Buttons |= TicCmdButtons.Attack;
-            if (buttons[Ctl.Use].Held || Input.GetKey(KeyCode.F) || Input.GetKey(KeyCode.JoystickButton2)) cmd.Buttons |= TicCmdButtons.Use;
+            var pad = !Gamepad.Capturing;
+            if (buttons[Ctl.Fire].Held || Input.GetKey(KeyCode.LeftControl) || pad && Gamepad.Held(PadAction.Fire)) cmd.Buttons |= TicCmdButtons.Attack;
+            if (buttons[Ctl.Use].Held || Input.GetKey(KeyCode.F) || pad && Gamepad.Held(PadAction.Use)) cmd.Buttons |= TicCmdButtons.Use;
 
             // dev4 extensions (never in demos): free-look pitch, aim mode, jump.
             if (RekkrSettings.FreeLook)
@@ -755,7 +805,7 @@ namespace ManagedDoom.UnityPort
                 cmd.LookPitch = (short)PitchInt;
                 if (!RekkrSettings.AutoAim) cmd.Ext |= TicCmdExt.NoAutoAim;
             }
-            if (RekkrSettings.Jump && (buttons[Ctl.Jump].Held || Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.JoystickButton0)))
+            if (RekkrSettings.Jump && (buttons[Ctl.Jump].Held || Input.GetKey(KeyCode.Space) || pad && Gamepad.Held(PadAction.Jump)))
             {
                 cmd.Ext |= TicCmdExt.Jump;
             }
@@ -785,7 +835,7 @@ namespace ManagedDoom.UnityPort
 
         public void Reset()
         {
-            turnPixels = 0; turnCarry = 0; weaponRequest = -1; slotRequest = -1; gyroRadians = 0; pitch = 0;
+            turnPixels = 0; turnCarry = 0; weaponRequest = -1; slotRequest = -1; gyroRadians = 0; pitch = 0; padTurn = 0;
         }
 
         public void GrabMouse() { }

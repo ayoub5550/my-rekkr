@@ -354,7 +354,7 @@ public sealed partial class RekkrApp
         {
             var slot = Loc.Arabic ? 3 - i : i;
             var tr = new Rect(panel.x + W * 0.035F + slot * tw + W * 0.004F, panel.y + H * 0.115F, tw - W * 0.008F, H * 0.078F);
-            if (Plate(tr, tabs[i], settingsTab == i, PxSmall)) { settingsTab = i; controlsPage = 0; gfxPage = 0; }
+            if (Plate(tr, tabs[i], settingsTab == i, PxSmall)) { settingsTab = i; controlsPage = 0; gfxPage = 0; displayPage = 0; }
         }
 
         rowY = panel.y + H * 0.215F;
@@ -396,7 +396,7 @@ public sealed partial class RekkrApp
             if (ActionRow(Loc.T("edit"), Loc.T("edit_btn"))) OpenEditor();
             if (CornerButton(Loc.Arabic ? "< " + Loc.T("more") : Loc.T("more") + " >")) controlsPage = 1;
         }
-        else
+        else if (controlsPage == 1)
         {
             var fl = Toggle(Loc.T("free_look"), RekkrSettings.FreeLook);
             if (fl != RekkrSettings.FreeLook) { RekkrSettings.FreeLook = fl; if (!fl) input.CenterView(); }
@@ -407,9 +407,34 @@ public sealed partial class RekkrApp
                 RekkrSettings.Crosshair = (RekkrSettings.Crosshair + 1) % RekkrSettings.CrosshairStyles;
             var run = Toggle(Loc.T("run"), config.game_alwaysrun);
             if (run != config.game_alwaysrun) input.SetRun(run);
-            if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) controlsPage = 0;
+            if (CornerButton(Loc.Arabic ? "< " + Loc.T("pad_tab") : Loc.T("pad_tab") + " >")) controlsPage = 2;
             footer = Loc.T("look_hint");
         }
+        else DrawGamepadPage(ref footer);
+    }
+
+    /// <summary>dev7: gamepad status, look speed, invert, remap flow, reset.</summary>
+    private void DrawGamepadPage(ref string footer)
+    {
+        var name = Gamepad.Connected ? Gamepad.Name.ToUpperInvariant() : Loc.T("pad_none");
+        if (name.Length > 22) name = name.Substring(0, 22);
+        Cycle(Loc.T("pad"), name, true);
+        Gamepad.LookSpeed = Stepper(Loc.T("pad_look"), Gamepad.LookSpeed, 1, 10, 1, "");
+        Gamepad.InvertLookY = Toggle(Loc.T("pad_inv"), Gamepad.InvertLookY);
+        if (Gamepad.Capturing)
+        {
+            var step = Gamepad.Current;
+            var what = Loc.T("pad_step_" + step.ToString().ToLowerInvariant());
+            if (ActionRow(what + "  (" + Mathf.CeilToInt(Gamepad.StepTimeLeft) + ")", Loc.T("pad_stop"))) Gamepad.StopCapture();
+            footer = Loc.T("pad_capture_hint");
+        }
+        else
+        {
+            if (ActionRow(Loc.T("pad_remap"), Loc.T("pad_remap_btn"))) Gamepad.StartCapture();
+            footer = Loc.T("pad_hint");
+        }
+        if (ActionRow(Loc.T("pad_reset"), Loc.T("reset"))) { Gamepad.StopCapture(); Gamepad.Defaults(); }
+        if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) { Gamepad.StopCapture(); controlsPage = 0; }
     }
 
     private void DrawMotionTab()
@@ -434,8 +459,11 @@ public sealed partial class RekkrApp
         RekkrSettings.SmoothLook = Toggle(Loc.T("smooth_look"), RekkrSettings.SmoothLook);
     }
 
+    private int displayPage;   // dev7: page 2 = save backup
+
     private void DrawDisplayTab()
     {
+        if (displayPage == 1) { DrawBackupPage(); return; }
         var modeIdx = System.Array.IndexOf(RekkrSettings.FpsModes, RekkrSettings.FpsMode);
         if (modeIdx < 0) modeIdx = 0;
         var fpsLabelTxt = RekkrSettings.FpsMode == 0 ? Mix(Loc.T("auto"), DisplayRate.Target.ToString()) : RekkrSettings.FpsMode.ToString();
@@ -455,6 +483,19 @@ public sealed partial class RekkrApp
             SetMusicHQ(!RekkrSettings.MusicHQ);
         }
         if (Cycle(Loc.T("lang"), Loc.Arabic ? "العربية" : "ENGLISH", true)) SetArabic(!Loc.Arabic);
+        if (CornerButton(Loc.Arabic ? "< " + Loc.T("saves_tab") : Loc.T("saves_tab") + " >")) { displayPage = 1; backupStatus = null; }
+    }
+
+    /// <summary>dev7: export / import all saves + settings (Android document picker).</summary>
+    private void DrawBackupPage()
+    {
+        Hint(Loc.T("backup_hint"));
+        rowY += rowH * 0.3F;
+        if (ActionRow(Loc.T("backup_export"), Loc.T("backup_export_btn"))) ExportSaves();
+        if (ActionRow(Loc.T("backup_import"), Loc.T("backup_import_btn"))) ImportSaves();
+        rowY += rowH * 0.3F;
+        if (!string.IsNullOrEmpty(backupStatus)) Hint(backupStatus);
+        if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) displayPage = 0;
     }
 
     // dev3 stage 9: Graphics tab (two pages: main + effects; the panel fits 6 rows per page).
@@ -508,11 +549,17 @@ public sealed partial class RekkrApp
             if (b != RekkrSettings.WaterFx) { RekkrSettings.WaterFx = b; MarkCustom(); }
             if (Cycle(Loc.T("fx_weather"), Loc.T("weather_" + RekkrSettings.Weather))) { RekkrSettings.Weather = (RekkrSettings.Weather + 1) % 4; MarkCustom(); }
             if (Cycle(Loc.T("fx_fog"), Loc.T("lvl_" + RekkrSettings.Fog))) { RekkrSettings.Fog = (RekkrSettings.Fog + 1) % 3; MarkCustom(); }
-            var c = Toggle(Loc.T("fx_lights"), RekkrSettings.DynLights);
-            if (c != RekkrSettings.DynLights) { RekkrSettings.DynLights = c; MarkCustom(); }
+            // dev7: Off / Low (subtle, default) / High
+            var lv = RekkrSettings.DynLights ? RekkrSettings.DynLightLevel : 0;
+            if (Cycle(Loc.T("fx_lights"), Loc.T(lv == 0 ? "lvl_0" : lv == 1 ? "lvl_1" : "lvl_3")))
+            {
+                lv = (lv + 1) % 3;
+                RekkrSettings.DynLights = lv > 0; if (lv > 0) RekkrSettings.DynLightLevel = lv;
+                MarkCustom();
+            }
             var d = Toggle(Loc.T("fx_rays"), RekkrSettings.SunRays);
             if (d != RekkrSettings.SunRays) { RekkrSettings.SunRays = d; MarkCustom(); }
-            if (!RekkrSettings.SmoothLighting) Hint(Loc.T("fx_needs_light"));
+            if (!RekkrSettings.FxLighting) Hint(Loc.T("fx_needs_light"));
             if (CornerButton(next)) gfxPage = 3;
         }
         else if (gfxPage == 3)
@@ -525,6 +572,8 @@ public sealed partial class RekkrApp
                 if (Cycle(Loc.T("rm_things"), Loc.T("rm_things_" + RekkrSettings.RemasterThings))) RekkrSettings.RemasterThings = (RekkrSettings.RemasterThings + 1) % 2;
                 var sh = Toggle(Loc.T("rm_shadows"), RekkrSettings.RemasterShadows);
                 if (sh != RekkrSettings.RemasterShadows) RekkrSettings.RemasterShadows = sh;
+                RekkrSettings.RemasterLightShadows = Toggle(Loc.T("rm_lshadows"), RekkrSettings.RemasterLightShadows);   // dev7
+                if (Cycle(Loc.T("rm_weapon"), Loc.T("rm_weapon_" + RekkrSettings.RemasterWeapon))) RekkrSettings.RemasterWeapon = 1 - RekkrSettings.RemasterWeapon;
             }
             // dev6: floor for very dark sectors (E3 has many light-0 rooms); works in both renderers
             if (Cycle(Loc.T("dark_areas"), Loc.T("dark_areas_" + RekkrSettings.DarkAreas))) RekkrSettings.DarkAreas = (RekkrSettings.DarkAreas + 1) % 3;
@@ -539,7 +588,7 @@ public sealed partial class RekkrApp
             if (b != RekkrSettings.Particles) { RekkrSettings.Particles = b; MarkCustom(); }
             var c = Toggle(Loc.T("fx_dof"), RekkrSettings.DoF);
             if (c != RekkrSettings.DoF) { RekkrSettings.DoF = c; MarkCustom(); }
-            if (!RekkrSettings.SmoothLighting) Hint(Loc.T("fx_needs_light"));
+            if (!RekkrSettings.FxLighting) Hint(Loc.T("fx_needs_light"));
             if (CornerButton(Loc.Arabic ? Loc.T("gfx_back") + " >" : "< " + Loc.T("gfx_back"))) gfxPage = 0;
         }
     }

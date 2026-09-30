@@ -41,7 +41,7 @@ namespace ManagedDoom.UnityPort
                         Fog = new Color(0.42F, 0.28F, 0.2F), FogMul = 1.1F, AutoWeather = 1, DriftBamPerSec = 2.5e6F },
             new Atmos { SunYaw = 0, SunElev = 0, SunStrength = 0F, Sun = new Color(1F, 0.3F, 0.1F), Rays = 0F,
                         Cloud = new Color(0.26F, 0.07F, 0.04F), Coverage = 0.5F, CloudSpeed = 0.04F, Wind = new Vector2(0.5F, 1F),
-                        Fog = new Color(0.3F, 0.07F, 0.04F), FogMul = 1.3F, AutoWeather = 3, DriftBamPerSec = 3.5e6F },
+                        Fog = new Color(0.3F, 0.07F, 0.04F), FogMul = 1.0F, AutoWeather = 3, DriftBamPerSec = 3.5e6F },
             new Atmos { SunYaw = 300, SunElev = 9, SunStrength = 1.0F, Sun = new Color(1F, 0.8F, 0.45F), Rays = 1.2F,
                         Cloud = new Color(1F, 0.78F, 0.55F), Coverage = 0.34F, CloudSpeed = 0.015F, Wind = new Vector2(0.9F, -0.3F),
                         Fog = new Color(0.56F, 0.38F, 0.45F), FogMul = 0.9F, AutoWeather = 4, DriftBamPerSec = 1.0e6F },
@@ -103,12 +103,12 @@ namespace ManagedDoom.UnityPort
 
         /// <summary>Runs the effect passes for this frame and returns the processed frame texture
         /// (same layout as the input), or the input when nothing to do.</summary>
-        public Texture Process(UnityVideo video, Doom doom, bool inLevel, Fixed frameFrac)
+        public Texture Process(UnityVideo video, DoomGame game, Fixed frameFrac)
         {
             var src = video.FrameTexture;   // dev6: Remaster composite when active
-            if (!inLevel || !RekkrSettings.SmoothLighting) { ThreeDRenderer.SkyDriftBam = 0; return src; }
-            var world3 = doom.Game.World;
-            var ep = Mathf.Clamp(doom.Game.Options.Episode, 1, 4) - 1;
+            if (game == null || !RekkrSettings.FxLighting) { ThreeDRenderer.SkyDriftBam = 0; return src; }
+            var world3 = game.World;
+            var ep = Mathf.Clamp(game.Options.Episode, 1, 4) - 1;
             var a = Episodes[ep];
             var t = Time.time;
             var dt = Mathf.Min(Time.deltaTime, 0.05F);
@@ -129,6 +129,7 @@ namespace ManagedDoom.UnityPort
             var sunOn = RekkrSettings.SkyFx ? a.SunStrength : 0F;
             mat.SetVector("_Sun", new Vector4(sun.x, sun.y, sun.z, sunOn));
             mat.SetVector("_SunCol", new Vector4(a.Sun.r, a.Sun.g, a.Sun.b, RekkrSettings.SunRays ? a.Rays : 0F));
+            sunCol = a.Sun;
             var sunScreen = Vector4.zero;
             {
                 float ca = Mathf.Cos(v.Angle), sa = Mathf.Sin(v.Angle);
@@ -146,7 +147,7 @@ namespace ManagedDoom.UnityPort
             mat.SetVector("_SunScreen", sunScreen);
 
             // fog / clouds
-            var fogD = RekkrSettings.Fog == 0 ? 0F : (RekkrSettings.Fog == 1 ? 1F / 2600F : 1F / 1300F) * a.FogMul;
+            var fogD = RekkrSettings.Fog == 0 ? 0F : (RekkrSettings.Fog == 1 ? 1F / 3200F : 1F / 1600F) * a.FogMul;   // dev7: thinner
             mat.SetVector("_FogCol", new Vector4(a.Fog.r, a.Fog.g, a.Fog.b, fogD));
             mat.SetVector("_Cloud", new Vector4(a.Cloud.r, a.Cloud.g, a.Cloud.b, a.Coverage));
             mat.SetVector("_CloudP", new Vector4(a.Wind.x, a.Wind.y, a.CloudSpeed, RekkrSettings.SkyFx ? 1 : 0));
@@ -157,21 +158,24 @@ namespace ManagedDoom.UnityPort
             UpdateLightning(wType == 1, t, dt);
             var inten = wType == 0 ? 0F : wType == 1 ? 1F : wType == 2 ? 0.9F : wType == 3 ? 0.9F : 0.8F;
             mat.SetVector("_Weather", new Vector4(wType, inten * outdoor, lightning * outdoor, wType == 1 ? outdoor : 0F));
+            mat.SetVector("_FogP", new Vector4(outdoor, 0, 0, 0));
 
             mat.SetVector("_Fx", new Vector4(RekkrSettings.WaterFx ? 1 : 0, RekkrSettings.AO ? 0.55F : 0F, RekkrSettings.DynLights ? 1 : 0, RekkrSettings.WaterFx ? 1 : 0));
             mat.SetVector("_Fx2", new Vector4(fogD > 0 ? 1 : 0, RekkrSettings.DoF ? 1 : 0, 700F, DebugView ? 1 : 0));
 
             // lights
-            if (RekkrSettings.DynLights) GatherLights(world3, frameFrac, v); else LightsLastFrame = 0;
-            mat.SetFloat("_LightCount", LightsLastFrame);
+            if (preparedFrame != Time.frameCount) PrepareLights(game, frameFrac);
+            mat.SetFloat("_LightCount", RemasterLights ? 0 : LightsLastFrame);   // dev7: Remaster lights in its own shader
             mat.SetVectorArray("_LightPos", lightPos);
             mat.SetVectorArray("_LightCol", lightCol);
 
             // passes
             mat.SetTexture("_GTex", src);
             Graphics.Blit(src, world, mat, 0);
-            if (RekkrSettings.Particles) { UpdateParticles(world3, frameFrac, v, dt); DrawParticles(v); }
+            if (RekkrSettings.Particles) UpdateParticles(world3, frameFrac, v, dt);
             else particles.Clear();
+            UpdateWeather(world3, v, wType, a, dt);   // dev7: 3D weather
+            DrawParticles(v);
             var raysOn = sunScreen.z > 0;
             if (raysOn) Graphics.Blit(world, rays, mat, 1);
             if (RekkrSettings.DoF)
@@ -205,9 +209,27 @@ namespace ManagedDoom.UnityPort
         }
 
         // ---------------------------------------------------------------- dynamic lights
+        /// <summary>dev7: the same lights in world space (Doom x, y, z, radius) + rgb, for the Remaster shader
+        /// (real normals + point-light shadows). Valid after PrepareLights this frame.</summary>
+        public readonly Vector4[] WorldLightPos = new Vector4[8];
+        public readonly Vector4[] WorldLightCol = new Vector4[8];
+        /// <summary>dev7: set by the app when the GPU renderer lights the world itself (then this pass does not).</summary>
+        public static bool RemasterLights;
+        /// <summary>dev7: the last light of this frame is the player's muzzle flash (casts no shadow).</summary>
+        public bool MuzzleLast { get; private set; }
+        private int preparedFrame = -1;
+
+        /// <summary>dev7: gathers this frame's lights (call after the software view pass set LastView).</summary>
+        public void PrepareLights(DoomGame game, Fixed frac)
+        {
+            preparedFrame = Time.frameCount;
+            if (game == null || !RekkrSettings.DynLights || !RekkrSettings.FxLighting) { LightsLastFrame = 0; lightFade.Clear(); return; }
+            GatherLights(game.World, frac, ThreeDRenderer.LastView, Mathf.Min(Time.deltaTime, 0.05F));
+        }
+
         private readonly Vector4[] lightPos = new Vector4[8];
         private readonly Vector4[] lightCol = new Vector4[8];
-        private readonly List<(float d, Vector4 p, Vector4 c)> lightCand = new List<(float, Vector4, Vector4)>(64);
+        private readonly List<(float d, Vector4 p, Vector4 c, Mobj m)> lightCand = new List<(float, Vector4, Vector4, Mobj)>(64);
         private readonly Dictionary<int, Color> spriteColor = new Dictionary<int, Color>();
 
         /// <summary>Average colour of the bright pixels of a sprite frame (cached), as a light colour.</summary>
@@ -243,46 +265,91 @@ namespace ManagedDoom.UnityPort
             return c;
         }
 
-        private void GatherLights(World w, Fixed frac, ThreeDRenderer.ViewInfo v)
+        // dev7 rework (owner: "the dynamic lighting is horribly strong and bad"). dev5/dev6 lit the world from
+        // every thing with a fullbright frame (items, lamps, torches, fireballs) at 150–320 units, up to ×1.9,
+        // through walls, plus a big muzzle light on top of Doom's own extralight. Now:
+        //  - sources: projectiles and their explosions (strong), fullbright decorations (torches, lamps: weak,
+        //    small), monster attack flashes (short, weak); pickups (MF_SPECIAL) never glow on the world;
+        //  - occlusion: a source the player cannot see (Doom sight check, REJECT + BSP) does not light;
+        //  - the muzzle flash is small (Doom's extralight already brightens the whole view);
+        //  - intensity per level (Low = subtle, High = the old look halved) and a smooth fade in/out.
+        private readonly Dictionary<Mobj, float> lightFade = new Dictionary<Mobj, float>();
+        private readonly List<Mobj> fadeGone = new List<Mobj>();
+
+        private void GatherLights(World w, Fixed frac, ThreeDRenderer.ViewInfo v, float dt)
         {
             lightCand.Clear();
             float ca = Mathf.Cos(v.Angle), sa = Mathf.Sin(v.Angle);
-            var player = w.ConsolePlayer;
+            var player = w.DisplayPlayer;
+            if (player.FixedColorMap != 0) { LightsLastFrame = 0; lightFade.Clear(); return; }   // light amp / invulnerability
+            var level = Mathf.Clamp(RekkrSettings.DynLightLevel, 1, 2);
+            var gain = level == 1 ? 0.55F : 1F;
             foreach (var th in w.Thinkers)
             {
                 if (!(th is Mobj m) || m.ThinkerState != ThinkerState.Active) continue;
                 if (m == player.Mobj || (m.Frame & 0x8000) == 0) continue;
+                if ((m.Flags & MobjFlags.Special) != 0) continue;              // pickups: glow themselves only
+                // projectiles in flight, or exploding (ExplodeMissile clears MF_MISSILE, NOBLOCKMAP|NOGRAVITY stay)
+                var missile = (m.Flags & MobjFlags.Missile) != 0 || ((m.Flags & MobjFlags.NoBlockMap) != 0 && (m.Flags & MobjFlags.NoGravity) != 0);
+                var monster = (m.Flags & MobjFlags.CountKill) != 0;
                 var x = m.GetInterpolatedX(frac).ToFloat(); var y = m.GetInterpolatedY(frac).ToFloat();
                 var dx = x - v.X; var dy = y - v.Y;
+                var d2 = dx * dx + dy * dy;
+                if (d2 > 1200F * 1200F) continue;
                 var zv = dx * ca + dy * sa;
                 var xv = dx * sa - dy * ca;
-                var d2 = dx * dx + dy * dy;
-                if (d2 > 1500F * 1500F) continue;
-                var h = m.Height.ToFloat();
-                var radius = Mathf.Clamp(h * 4.5F, 150F, 320F);
+                // radius / strength per kind: projectiles + explosions, attacking monsters, decorations
+                float radius, k;
+                if (m.Type == MobjType.Puff) { radius = 70F; k = 0.25F; }
+                else if (missile) { radius = 190F; k = 0.9F; }
+                else if (monster) { radius = 120F; k = 0.35F; }
+                else { radius = 130F; k = 0.3F; }
                 if (zv < -radius || Mathf.Abs(xv) > zv * 2.2F + radius) continue;
+                var h = m.Height.ToFloat();
                 var z = m.GetInterpolatedZ(frac).ToFloat() + h * 0.6F;
-                var col = SpriteLightColor(m.Sprite, m.Frame);
-                var k = m.Type == MobjType.Puff ? 0.35F : 1F;
-                lightCand.Add((d2, new Vector4(xv, z - v.Z, zv, radius), new Vector4(col.r * k, col.g * k, col.b * k, 0)));
-            }
-            if (player.ExtraLight > 0 && player.Mobj != null)
-            {
-                var r = 200F + 90F * player.ExtraLight;
-                lightCand.Add((0, new Vector4(0, -8, 24, r), new Vector4(1F, 0.78F, 0.45F, 0)));
+                lightCand.Add((d2, new Vector4(xv, z - v.Z, zv, radius), new Vector4(k, x, y, z), m));
             }
             lightCand.Sort((p, q) => p.d.CompareTo(q.d));
-            var n = Mathf.Min(8, lightCand.Count);
-            for (var i = 0; i < 8; i++)
+            var n = 0;
+            fadeGone.Clear();
+            foreach (var key in lightFade.Keys) fadeGone.Add(key);
+            for (var i = 0; i < lightCand.Count && n < 8; i++)
             {
-                lightPos[i] = i < n ? lightCand[i].p : Vector4.zero;
-                lightCol[i] = i < n ? lightCand[i].c : Vector4.zero;
+                var (d, pos, kk, m) = lightCand[i];
+                // occlusion: only sources the player can see light the view (no light through walls)
+                var visible = player.Mobj == null || w.VisibilityCheck.CheckSight(player.Mobj, m);
+                lightFade.TryGetValue(m, out var fade);
+                fade = Mathf.MoveTowards(fade, visible ? 1F : 0F, dt * 6F);
+                lightFade[m] = fade;
+                fadeGone.Remove(m);
+                if (fade <= 0.01F) continue;
+                var col = SpriteLightColor(m.Sprite, m.Frame);
+                var s = kk.x * gain * fade;
+                lightPos[n] = pos;
+                lightCol[n] = new Vector4(col.r * s, col.g * s, col.b * s, 0);
+                WorldLightPos[n] = new Vector4(kk.y, kk.z, kk.w, pos.w);
+                WorldLightCol[n] = lightCol[n];
+                n++;
             }
+            foreach (var g in fadeGone) lightFade.Remove(g);
+            MuzzleLast = false;
+            if (player.ExtraLight > 0 && player.Mobj != null && n < 8)
+            {
+                MuzzleLast = true;
+                // muzzle flash: small and warm; Doom's extralight already lifts the whole view
+                lightPos[n] = new Vector4(0, -6, 30, 150F + 30F * player.ExtraLight);
+                lightCol[n] = new Vector4(0.45F * gain, 0.34F * gain, 0.2F * gain, 0);
+                WorldLightPos[n] = new Vector4(v.X + ca * 30F, v.Y + sa * 30F, v.Z - 6F, lightPos[n].w);
+                WorldLightCol[n] = lightCol[n];
+                n++;
+            }
+            for (var i = n; i < 8; i++) { lightPos[i] = Vector4.zero; lightCol[i] = Vector4.zero; WorldLightPos[i] = Vector4.zero; WorldLightCol[i] = Vector4.zero; }
             LightsLastFrame = n;
         }
 
         // ---------------------------------------------------------------- particles (visual only)
         private struct Particle { public UVec P, V; public Color C; public float Life, MaxLife, Size, Floor; public bool Glow, Rise; }
+        private struct Drop { public UVec P, V; public float Floor, Life, Phase; public byte Kind; }   // dev7 weather
         private readonly List<Particle> particles = new List<Particle>(512);
         private readonly HashSet<Mobj> seen = new HashSet<Mobj>();
         private readonly HashSet<Mobj> alive = new HashSet<Mobj>();
@@ -378,7 +445,7 @@ namespace ManagedDoom.UnityPort
 
         private void DrawParticles(ThreeDRenderer.ViewInfo v)
         {
-            if (particles.Count == 0) return;
+            if (particles.Count == 0 && drops.Count == 0) return;
             float ca = Mathf.Cos(v.Angle), sa = Mathf.Sin(v.Angle);
             float cx = v.WindowX + v.CenterX, cy = v.WindowY + v.CenterY;
             var prev = RenderTexture.active;
@@ -407,9 +474,141 @@ namespace ManagedDoom.UnityPort
                 Corner(fy + r, fx + r, H, W, zv, 1, 1);
                 Corner(fy - r, fx + r, H, W, zv, 0, 1);
             }
+            DrawDrops(v, cx, cy, W, H, ca, sa);
             GL.End();
             GL.PopMatrix();
             RenderTexture.active = prev;
+        }
+
+        // ---------------------------------------------------------------- dev7: 3D weather
+        // Owner: "the weather is bad". dev5 drew rain/snow as a screen-space pattern on every pixel while the
+        // player stood under the sky: it covered indoor walls, vanished under any roof and did not move with the
+        // world. Now drops are world-space particles spawned only above sectors open to the sky, around the
+        // camera, falling to that sector's floor, depth-tested against the G-buffer (walls hide them, windows
+        // show them), with small splashes. Kinds: 1 rain (streaks), 2 snow, 3 embers (rise), 4 dust motes.
+        private readonly List<Drop> drops = new List<Drop>(1200);
+        private World dropWorld;
+        private int dropType;
+
+        private static int DropTarget(int type) => type == 1 ? 900 : type == 2 ? 700 : type == 3 ? 110 : type == 4 ? 140 : 0;
+
+        private bool SpawnDrop(World w, ThreeDRenderer.ViewInfo v, int type, bool anyHeight, out Drop d)
+        {
+            d = default;
+            var r = type == 1 ? 700F : type == 2 ? 600F : 900F;
+            // 80 % in front of the camera (what the player sees), 20 % all around (turning)
+            var ang = Random.value < 0.8F ? v.Angle + Random.Range(-1.3F, 1.3F) : Random.Range(0F, Mathf.PI * 2F);
+            var dist = Mathf.Sqrt(Random.value) * r + 12F;
+            var x = v.X + Mathf.Cos(ang) * dist; var y = v.Y + Mathf.Sin(ang) * dist;
+            var sec = Geometry.PointInSubsector(Fixed.FromFloat(x), Fixed.FromFloat(y), w.Map).Sector;
+            if (sec.CeilingFlat != content.Flats.SkyFlatNumber) return false;   // under a roof: no weather
+            var floor = sec.FloorHeight.ToFloat();
+            var top = Mathf.Max(v.Z + 260F, floor + 220F);
+            float z;
+            if (type == 3) z = anyHeight ? Random.Range(floor, floor + 180F) : floor + 2F;
+            else if (type == 4) z = Random.Range(floor + 8F, floor + 150F);
+            else z = anyHeight ? Random.Range(floor, top) : top + Random.Range(0F, 60F);
+            UVec vel;
+            var wind = new UVec(windX, windY, 0);
+            if (type == 1) vel = wind * 60F + new UVec(0, 0, -Random.Range(820F, 980F));
+            else if (type == 2) vel = wind * 25F + new UVec(Random.Range(-10F, 10F), Random.Range(-10F, 10F), -Random.Range(55F, 85F));
+            else if (type == 3) vel = new UVec(Random.Range(-8F, 8F), Random.Range(-8F, 8F), Random.Range(22F, 50F));
+            else vel = new UVec(Random.Range(-6F, 6F), Random.Range(-6F, 6F), Random.Range(-3F, 3F));
+            d = new Drop { P = new UVec(x, y, z), V = vel, Floor = floor, Life = type >= 3 ? Random.Range(2.5F, 5F) : 99F, Phase = Random.value * 6.3F, Kind = (byte)type };
+            return true;
+        }
+
+        private float windX, windY;
+
+        private void UpdateWeather(World w, ThreeDRenderer.ViewInfo v, int type, Atmos a, float dt)
+        {
+            if (w != dropWorld || type != dropType) { dropWorld = w; dropType = type; drops.Clear(); }
+            windX = a.Wind.x; windY = a.Wind.y;
+            var target = DropTarget(type);
+            if (target == 0) { drops.Clear(); return; }
+            var rMax = type == 1 ? 760F : type == 2 ? 660F : 960F;
+            for (var i = drops.Count - 1; i >= 0; i--)
+            {
+                var d = drops[i];
+                d.P += d.V * dt;
+                d.Life -= dt;
+                if (d.Kind == 2) d.P.x += Mathf.Sin(Time.time * 1.3F + d.Phase) * 12F * dt;
+                if (d.Kind == 4) { d.P.x += Mathf.Sin(Time.time * 0.4F + d.Phase) * 5F * dt; d.P.y += Mathf.Cos(Time.time * 0.33F + d.Phase) * 5F * dt; }
+                var dx = d.P.x - v.X; var dy = d.P.y - v.Y;
+                var gone = d.Life <= 0 || dx * dx + dy * dy > rMax * rMax || d.P.z > d.Floor + 900F;
+                if (!gone && d.P.z <= d.Floor)
+                {
+                    gone = true;
+                    // rain splash: a few short droplets (visual only; uses the particle list)
+                    if (d.Kind == 1 && Random.value < 0.35F && particles.Count < 480)
+                        for (var k = 0; k < 2; k++)
+                            Spawn(new UVec(d.P.x, d.P.y, d.Floor + 1F), new UVec(Random.Range(-30F, 30F), Random.Range(-30F, 30F), Random.Range(40F, 80F)),
+                                  new Color(0.6F, 0.68F, 0.8F, 0.45F), 0.18F, 0.9F, d.Floor, false);
+                }
+                if (gone) drops.RemoveAt(i); else drops[i] = d;
+            }
+            // refill: the first frames fill the whole column (anyHeight), later drops start at the top
+            var budget = drops.Count < target / 3 ? 400 : 90;
+            var tries = budget * 3;
+            while (drops.Count < target && budget > 0 && tries-- > 0)
+            {
+                if (SpawnDrop(w, v, type, drops.Count < target / 2, out var d)) { drops.Add(d); budget--; }
+            }
+        }
+
+        private void DrawDrops(ThreeDRenderer.ViewInfo v, float cx, float cy, float W, float H, float ca, float sa)
+        {
+            if (drops.Count == 0) return;
+            var t = Time.time;
+            foreach (var d in drops)
+            {
+                var dx = d.P.x - v.X; var dy = d.P.y - v.Y;
+                var zv = dx * ca + dy * sa;
+                if (zv < 8F) continue;
+                var xv = dx * sa - dy * ca;
+                var fx = cx + xv / zv * v.Projection;
+                var fy = cy - (d.P.z - v.Z) / zv * v.Projection;
+                if (fx < -20 || fx > W + 20 || fy < -60 || fy > H + 20) continue;
+                var near = Mathf.Clamp01(1.3F - zv / 700F);
+                Color col;
+                if (d.Kind == 1)
+                {
+                    // streak: from the drop up along its velocity (motion blur of ~1/40 s)
+                    var tx = d.P.x - d.V.x * 0.025F - v.X; var ty = d.P.y - d.V.y * 0.025F - v.Y;
+                    var tz = d.P.z - d.V.z * 0.025F;
+                    var zt = tx * ca + ty * sa; if (zt < 8F) continue;
+                    var gx = cx + (tx * sa - ty * ca) / zt * v.Projection;
+                    var gy = cy - (tz - v.Z) / zt * v.Projection;
+                    col = new Color(0.62F, 0.68F, 0.78F, 0.16F + 0.18F * near);
+                    GL.Color(col);
+                    Segment(fx, fy, gx, gy, Mathf.Max(0.55F, 0.9F / zv * v.Projection), H, W, zv);
+                    continue;
+                }
+                var r = d.Kind == 2 ? Mathf.Max(0.7F, 1.6F / zv * v.Projection) : Mathf.Max(0.6F, 1.1F / zv * v.Projection);
+                if (d.Kind == 2) col = new Color(0.9F, 0.93F, 1F, 0.55F + 0.3F * near);
+                else if (d.Kind == 3) col = new Color(1F, 0.42F, 0.1F, (0.6F + 0.4F * Mathf.Sin(t * 9F + d.Phase * 5F)) * Mathf.Clamp01(d.Life));
+                else col = new Color(sunCol.r * 0.5F, sunCol.g * 0.5F, sunCol.b * 0.45F, 0.3F * Mathf.Clamp01(d.Life));
+                GL.Color(col);
+                Corner(fy - r, fx - r, H, W, zv, 0, 0);
+                Corner(fy + r, fx - r, H, W, zv, 1, 0);
+                Corner(fy + r, fx + r, H, W, zv, 1, 1);
+                Corner(fy - r, fx + r, H, W, zv, 0, 1);
+            }
+        }
+
+        private Color sunCol = Color.white;
+
+        /// <summary>A thin quad from frame point (ax, ay) to (bx, by), half-width w (frame px).</summary>
+        private static void Segment(float ax, float ay, float bx, float by, float w, float H, float W, float z)
+        {
+            var dx = bx - ax; var dy = by - ay;
+            var len = Mathf.Max(0.001F, Mathf.Sqrt(dx * dx + dy * dy));
+            var nx = -dy / len * w; var ny = dx / len * w;
+            // corners: uv.y across (0..1), uv.z along (0..1); the particle shader fades both ends
+            Corner(ay + ny, ax + nx, H, W, z, 0, 0);
+            Corner(ay - ny, ax - nx, H, W, z, 1, 0);
+            Corner(by - ny, bx - nx, H, W, z, 1, 1);
+            Corner(by + ny, bx + nx, H, W, z, 0, 1);
         }
 
         private static void Corner(float fy, float fx, float H, float W, float z, float cu, float cv)

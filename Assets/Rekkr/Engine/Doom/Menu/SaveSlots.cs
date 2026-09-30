@@ -73,5 +73,8 @@ namespace ManagedDoom
         }
 
         public int Count => slots.Length;
+
+        // my-rekkr dev7: re-read the slot names after a save backup was restored.
+        public void Refresh() => slots = null;
     }
 }

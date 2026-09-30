@@ -58,6 +58,10 @@ public sealed partial class RekkrApp
         else if (testScenario == 5) yield return Scenario5();
         else if (testScenario == 6) yield return Scenario6();
         else if (testScenario == 7) yield return Scenario7();
+        else if (testScenario == 8) yield return Scenario8();   // dev7 settings coverage
+        else if (testScenario == 9) yield return Scenario9();   // dev7 save backup round trip
+        else if (testScenario == 10) yield return Scenario10(); // dev7 Remaster: 3D weapon, light shadows, spectre, door/lift
+        else if (testScenario == 11) yield return Scenario11(); // dev7 all 36 maps in Remaster, every effect on
         else yield return Scenario1();
         FinishTestLoop();
     }

@@ -25,10 +25,11 @@ namespace ManagedDoom.Remaster
 
         /// <summary>Builds the mesh of <paramref name="patch"/> (atlas slot <paramref name="slot"/>) with the
         /// thickness scale <paramref name="depthScale"/> (1 monsters, ~0.5 flat items). Mirrored if flip.</summary>
-        public static ExtrudedMesh Build(Patch patch, int slot, bool flip, float depthScale)
+        public static ExtrudedMesh Build(Patch patch, int slot, bool flip, float depthScale, int maxSize = 0)
         {
             int w = patch.Width, h = patch.Height;
-            if (w <= 0 || h <= 0 || w > MaxSize || h > MaxSize) return null;   // huge patches stay billboards
+            var cap = maxSize > 0 ? maxSize : MaxSize;   // dev7: weapon sprites are wider (REKKR bow: 700x240)
+            if (w <= 0 || h <= 0 || w > cap || h > cap) return null;   // huge patches stay billboards
             var solid = new bool[w * h];
             for (var x = 0; x < w && x < patch.Columns.Length; x++)
                 foreach (var post in patch.Columns[x])

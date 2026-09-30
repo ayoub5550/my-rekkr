@@ -50,6 +50,7 @@ namespace ManagedDoom.UnityPort
         public static int Weather = 3;           // 0 auto (per episode), 1 rain, 2 snow, 3 off
         public static int Fog;                   // 0 off, 1 light, 2 medium
         public static bool DynLights;            // fireballs / torches / muzzle flash light the world
+        public static int DynLightLevel = 1;     // dev7: 1 low (subtle, default), 2 high
         public static bool SunRays;              // god rays from the sun
         public static bool AO;                   // ambient occlusion in corners
         public static bool Particles;            // sparks, blood drops, splashes, embers
@@ -60,6 +61,8 @@ namespace ManagedDoom.UnityPort
         public static bool RemasterAllowed => ManagedDoom.UnityPort.DeviceClass.StrongGpu;
         public static int RemasterThings = 1;    // dev6: 0 flat billboards (original sprites), 1 extruded 3D voxel sprites
         public static bool RemasterShadows = true; // dev6: sun shadow map in outdoor areas
+        public static bool RemasterLightShadows = true; // dev7: the two nearest dynamic lights cast shadows (Remaster)
+        public static int RemasterWeapon = 1;     // dev7: 0 original flat weapon, 1 3D (extruded) weapon (Remaster)
         public static int DarkAreas = 1;         // dev6: 0 original sector light, 1 lifted, 2 bright (E3 has many light-0 rooms)
         public static readonly int[] DarkAreaFloor = { 0, 112, 144 };
 
@@ -101,7 +104,11 @@ namespace ManagedDoom.UnityPort
 
         /// <summary>dev5: any world effect on (they need smooth lighting for the G-buffer).</summary>
         public static bool AnyWorldFx =>
-            SmoothLighting && (SkyFx || WaterFx || Weather != 3 || Fog > 0 || DynLights || SunRays || AO || Particles || DoF);
+            FxLighting && (SkyFx || WaterFx || Weather != 3 || Fog > 0 || DynLights || SunRays || AO || Particles || DoF);
+
+        /// <summary>dev7: the G-buffer the world effects need exists (smooth lighting, or Remaster, which always
+        /// renders true colour). dev6 required smooth lighting even in Remaster, so effects vanished there.</summary>
+        public static bool FxLighting => SmoothLighting || (Remaster && RemasterAllowed);
 
         /// <summary>Custom button placement: centre as a fraction of the screen + size multiplier.</summary>
         public static readonly Dictionary<Ctl, (Vector2 pos, float scale)> Layout = new Dictionary<Ctl, (Vector2, float)>();
@@ -150,6 +157,7 @@ namespace ManagedDoom.UnityPort
             Weather = Mathf.Clamp(PlayerPrefs.GetInt("fx_weather", 3), 0, 3);
             Fog = Mathf.Clamp(PlayerPrefs.GetInt("fx_fog", 0), 0, 2);
             DynLights = PlayerPrefs.GetInt("fx_lights", 0) == 1;
+            DynLightLevel = Mathf.Clamp(PlayerPrefs.GetInt("fx_lights_lvl", 1), 1, 2);
             SunRays = PlayerPrefs.GetInt("fx_rays", 0) == 1;
             AO = PlayerPrefs.GetInt("fx_ao", 0) == 1;
             Particles = PlayerPrefs.GetInt("fx_particles", 0) == 1;
@@ -157,6 +165,8 @@ namespace ManagedDoom.UnityPort
             Remaster = RemasterAllowed && PlayerPrefs.GetInt("gfx_remaster", 0) == 1;
             RemasterThings = Mathf.Clamp(PlayerPrefs.GetInt("rm_things", 1), 0, 1);
             RemasterShadows = PlayerPrefs.GetInt("rm_shadows", 1) == 1;
+            RemasterLightShadows = PlayerPrefs.GetInt("rm_lshadows", 1) == 1;
+            RemasterWeapon = Mathf.Clamp(PlayerPrefs.GetInt("rm_weapon", 1), 0, 1);
             DarkAreas = Mathf.Clamp(PlayerPrefs.GetInt("gfx_dark", 1), 0, 2);
             ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 3);
             // First start (new install): pick a preset for the device (dev5: Masterpiece on 8-core phones).
@@ -178,6 +188,7 @@ namespace ManagedDoom.UnityPort
                 if (GfxPreset == 2 && Resolution == 800) Resolution = 600;
                 PlayerPrefs.SetInt("dev4_migrated", 1);
             }
+            ManagedDoom.UnityPort.Gamepad.Load();   // dev7
             var lang = PlayerPrefs.GetString("lang", "");
             Arabic = lang == "" ? Application.systemLanguage == SystemLanguage.Arabic : lang == "ar";
             Layout.Clear();
@@ -195,62 +206,85 @@ namespace ManagedDoom.UnityPort
             }
         }
 
+        /// <summary>dev7 save backup: every value the last Save() wrote (key -> int or string).</summary>
+        public static readonly Dictionary<string, object> Snapshot = new Dictionary<string, object>();
+        private static void SetI(string k, int v) { PlayerPrefs.SetInt(k, v); Snapshot[k] = v; }
+        private static void SetS(string k, string v) { PlayerPrefs.SetString(k, v); Snapshot[k] = v; }
+        private static void DelKey(string k) { PlayerPrefs.DeleteKey(k); Snapshot.Remove(k); }
+
+        /// <summary>dev7: writes imported settings to PlayerPrefs (layout keys not in the backup are cleared) and reloads.</summary>
+        public static void Import(Dictionary<string, object> prefs)
+        {
+            foreach (var c in Editable) PlayerPrefs.DeleteKey("lay_" + c);
+            foreach (var kv in prefs)
+            {
+                if (kv.Value is int i) PlayerPrefs.SetInt(kv.Key, i);
+                else if (kv.Value is string str) PlayerPrefs.SetString(kv.Key, str);
+            }
+            PlayerPrefs.Save();
+            Load();
+        }
+
         public static void Save()
         {
-            PlayerPrefs.SetInt("look_sens", LookSensitivity);
-            PlayerPrefs.SetInt("ctl_scale", ControlsScale);
-            PlayerPrefs.SetInt("ctl_alpha", ControlsOpacity);
-            PlayerPrefs.SetInt("left_handed", LeftHanded ? 1 : 0);
-            PlayerPrefs.SetInt("gyro", Gyro ? 1 : 0);
-            PlayerPrefs.SetInt("gyro_sens", GyroSensitivity);
-            PlayerPrefs.SetInt("gyro_inv", GyroInvert ? 1 : 0);
-            PlayerPrefs.SetInt("haptics", Haptics ? 1 : 0);
-            PlayerPrefs.SetInt("fps_mode", FpsMode);
-            PlayerPrefs.SetInt("widescreen", Widescreen ? 1 : 0);
-            PlayerPrefs.SetInt("show_fps", ShowFps ? 1 : 0);
-            PlayerPrefs.SetInt("music_hq", MusicHQ ? 1 : 0);
-            PlayerPrefs.SetInt("smooth_look", SmoothLook ? 1 : 0);
-            PlayerPrefs.SetInt("stable_perf", StablePerf ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_threads", RenderThreads);
-            PlayerPrefs.SetInt("gfx_res", Resolution);
-            PlayerPrefs.SetInt("gfx_dynres", DynamicRes ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_light", SmoothLighting ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_bloom", Bloom);
-            PlayerPrefs.SetInt("gfx_vignette", Vignette);
-            PlayerPrefs.SetInt("gfx_grade", ColorGrade);
-            PlayerPrefs.SetInt("gfx_sharpen", Sharpen ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_crt", Crt ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_sidefill", SideFill ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_preset", GfxPreset);
-            PlayerPrefs.SetInt("free_look", FreeLook ? 1 : 0);
-            PlayerPrefs.SetInt("invert_look", InvertLook ? 1 : 0);
-            PlayerPrefs.SetInt("autoaim", AutoAim ? 1 : 0);
-            PlayerPrefs.SetInt("jump", Jump ? 1 : 0);
-            PlayerPrefs.SetInt("stick_mode", StickMode);
-            PlayerPrefs.SetInt("crosshair", Crosshair);
-            PlayerPrefs.SetInt("fx_sky", SkyFx ? 1 : 0);
-            PlayerPrefs.SetInt("fx_water", WaterFx ? 1 : 0);
-            PlayerPrefs.SetInt("fx_weather", Weather);
-            PlayerPrefs.SetInt("fx_fog", Fog);
-            PlayerPrefs.SetInt("fx_lights", DynLights ? 1 : 0);
-            PlayerPrefs.SetInt("fx_rays", SunRays ? 1 : 0);
-            PlayerPrefs.SetInt("fx_ao", AO ? 1 : 0);
-            PlayerPrefs.SetInt("fx_particles", Particles ? 1 : 0);
-            PlayerPrefs.SetInt("fx_dof", DoF ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_remaster", Remaster ? 1 : 0);
-            PlayerPrefs.SetInt("rm_things", RemasterThings);
-            PlayerPrefs.SetInt("rm_shadows", RemasterShadows ? 1 : 0);
-            PlayerPrefs.SetInt("gfx_dark", DarkAreas);
-            PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
+            SetI("look_sens", LookSensitivity);
+            SetI("ctl_scale", ControlsScale);
+            SetI("ctl_alpha", ControlsOpacity);
+            SetI("left_handed", LeftHanded ? 1 : 0);
+            SetI("gyro", Gyro ? 1 : 0);
+            SetI("gyro_sens", GyroSensitivity);
+            SetI("gyro_inv", GyroInvert ? 1 : 0);
+            SetI("haptics", Haptics ? 1 : 0);
+            SetI("fps_mode", FpsMode);
+            SetI("widescreen", Widescreen ? 1 : 0);
+            SetI("show_fps", ShowFps ? 1 : 0);
+            SetI("music_hq", MusicHQ ? 1 : 0);
+            SetI("smooth_look", SmoothLook ? 1 : 0);
+            SetI("stable_perf", StablePerf ? 1 : 0);
+            SetI("gfx_threads", RenderThreads);
+            SetI("gfx_res", Resolution);
+            SetI("gfx_dynres", DynamicRes ? 1 : 0);
+            SetI("gfx_light", SmoothLighting ? 1 : 0);
+            SetI("gfx_bloom", Bloom);
+            SetI("gfx_vignette", Vignette);
+            SetI("gfx_grade", ColorGrade);
+            SetI("gfx_sharpen", Sharpen ? 1 : 0);
+            SetI("gfx_crt", Crt ? 1 : 0);
+            SetI("gfx_sidefill", SideFill ? 1 : 0);
+            SetI("gfx_preset", GfxPreset);
+            SetI("free_look", FreeLook ? 1 : 0);
+            SetI("invert_look", InvertLook ? 1 : 0);
+            SetI("autoaim", AutoAim ? 1 : 0);
+            SetI("jump", Jump ? 1 : 0);
+            SetI("stick_mode", StickMode);
+            SetI("crosshair", Crosshair);
+            SetI("fx_sky", SkyFx ? 1 : 0);
+            SetI("fx_water", WaterFx ? 1 : 0);
+            SetI("fx_weather", Weather);
+            SetI("fx_fog", Fog);
+            SetI("fx_lights", DynLights ? 1 : 0);
+            SetI("fx_lights_lvl", DynLightLevel);
+            SetI("fx_rays", SunRays ? 1 : 0);
+            SetI("fx_ao", AO ? 1 : 0);
+            SetI("fx_particles", Particles ? 1 : 0);
+            SetI("fx_dof", DoF ? 1 : 0);
+            SetI("gfx_remaster", Remaster ? 1 : 0);
+            SetI("rm_things", RemasterThings);
+            SetI("rm_shadows", RemasterShadows ? 1 : 0);
+            SetI("rm_lshadows", RemasterLightShadows ? 1 : 0);
+            SetI("rm_weapon", RemasterWeapon);
+            SetI("gfx_dark", DarkAreas);
+            SetS("lang", Arabic ? "ar" : "en");
+            ManagedDoom.UnityPort.Gamepad.Save(SetS, SetI);   // dev7
             foreach (var c in Editable)
             {
                 if (Layout.TryGetValue(c, out var v))
                 {
-                    PlayerPrefs.SetString("lay_" + c, string.Format(CultureInfo.InvariantCulture, "{0:F4},{1:F4},{2:F3}", v.pos.x, v.pos.y, v.scale));
+                    SetS("lay_" + c, string.Format(CultureInfo.InvariantCulture, "{0:F4},{1:F4},{2:F3}", v.pos.x, v.pos.y, v.scale));
                 }
                 else
                 {
-                    PlayerPrefs.DeleteKey("lay_" + c);
+                    DelKey("lay_" + c);
                 }
             }
             PlayerPrefs.Save();

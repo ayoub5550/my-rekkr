@@ -380,6 +380,12 @@ namespace ManagedDoom.Video
         /// renderer draws it. Only used with TrueColor (the G-buffer marks the pixels for the compositor).</summary>
         public static bool WorldPassOff;
 
+        /// <summary>my-rekkr dev7 Remaster 3D weapon: psprite layers (0 weapon, 1 flash) the GPU draws as extruded
+        /// meshes; the software renderer skips them and publishes where they would be (window pixels).</summary>
+        public static readonly bool[] GpuWeaponLayer = new bool[2];
+        public struct WeaponLayerInfo { public Patch Patch; public bool Flip, FullBright, Valid; public float X1, Top, Scale; }
+        public static readonly WeaponLayerInfo[] WeaponLayers = new WeaponLayerInfo[2];
+
         private void ClearWindowForGpu()
         {
             var fill = colorMap[0][0];
@@ -3215,6 +3221,21 @@ namespace ManagedDoom.Video
 
 
 
+        private void PublishWeaponLayer(int i, PlayerSpriteDef psp)
+        {
+            var frame = sprites[psp.State.Sprite].Frames[psp.State.Frame & 0x7fff];
+            var lump = frame.Patches[0];
+            var tx = psp.Sx - Fixed.FromInt(160) - Fixed.FromInt(lump.LeftOffset);
+            var alt = Fixed.FromInt(100) + Fixed.One / 4 - (psp.Sy - Fixed.FromInt(lump.TopOffset));
+            WeaponLayers[i] = new WeaponLayerInfo
+            {
+                Patch = lump, Flip = frame.Flip[0], FullBright = (psp.State.Frame & 0x8000) != 0, Valid = true,
+                X1 = (centerXFrac + tx * weaponScale).ToFloat(),
+                Top = (baseCenterYFrac - alt * weaponScale).ToFloat(),
+                Scale = weaponScale.ToFloat(),
+            };
+        }
+
         private void DrawPlayerSprites(Player player)
         {
             // Get light level.
@@ -3253,8 +3274,15 @@ namespace ManagedDoom.Video
             for (var i = 0; i < (int)PlayerSprite.Count; i++)
             {
                 var psp = player.PlayerSprites[i];
+                if (StripLeft == 0 && i < 2) WeaponLayers[i].Valid = false;
                 if (psp.State != null)
                 {
+                    // my-rekkr dev7: the GPU draws this layer in 3D (decided on the main thread before the render)
+                    if (WorldPassOff && i < 2 && GpuWeaponLayer[i] && !fuzz)
+                    {
+                        if (StripLeft == 0) PublishWeaponLayer(i, psp);
+                        continue;
+                    }
                     DrawPlayerSprite(psp, spriteLights, fuzz);
                 }
             }

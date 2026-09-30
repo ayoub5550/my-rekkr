@@ -3,7 +3,7 @@
 // like the dev3 smooth lighting), fake contrast on axis-aligned walls, extra light (gun flash), fixed
 // colormaps (invulnerability / light amp), current damage/bonus palette. Alpha = dev5 G-buffer code.
 // Passes: 0 opaque walls+flats, 1 masked (mid textures, things; alpha test), 2 sky, 3 sun shadow caster,
-// 4 extruded things (double-sided), 5 spectre fuzz.
+// 4 extruded things (double-sided), 5 spectre fuzz, 6 dev7 point-light shadow caster.
 // Vertex layout: see Engine/Remaster/RVertex.cs.
 Shader "Rekkr/Remaster/RemasterWorld"
 {
@@ -27,12 +27,20 @@ Shader "Rekkr/Remaster/RemasterWorld"
     float4 _RTSize;   // w, h, 1/w, 1/h
     float4 _Sky;      // sky texture slot, row step per pixel, drift (rad), stretched (0/1)
     float4 _Light;    // extra light, fixed colormap, smooth (0/1), time
-    float4 _Inst;     // extruded thing instance: sector, full bright (0/1), unused, unused
+    float4 _Inst;     // extruded thing instance: sector, full bright (0/1), dev7 weapon (0/1), unused
     sampler2D _ShadowMap;
     float4x4 _ShadowVP;   // world -> shadow clip (xy in -1..1, z = light depth in map units in w-less ortho)
     float4 _SunDir;       // unity world dir towards the sun, on (0/1)
     float4 _SunTint;      // rgb, shadow darkness (0..1)
     float4 _ShadowParams; // texel size (uv), bias (units), unused, unused
+    // dev7 point lights (unity world xyz, radius) / (rgb, shadow index or -1), shadow atlas of 3x2 tiles per light
+    float _PLCount;
+    float4 _PLPos[4];
+    float4 _PLCol[4];
+    float4x4 _PLVP[12];
+    sampler2D _PLShadow;
+    float4 _PLAtlas;      // tile size px, 1/tile, 1/3, 1/(2*maxShadows)
+    float4 _PLCaster;     // caster pass: light position, alpha test (0/1)
 
     struct appdata { float4 vertex : POSITION; float4 uv0 : TEXCOORD0; float4 uv1 : TEXCOORD1; };
     struct v2f
@@ -154,6 +162,46 @@ Shader "Rekkr/Remaster/RemasterWorld"
         return lerp(shadowed, sunny, lit);
     }
 
+    // dev7: shadow term of point light j (1 lit, 0 shadowed) from its distance tiles
+    float PointShadow(float j, float3 wpos, float3 d, float dist)
+    {
+        float3 a = abs(d);
+        float f = a.x >= a.y && a.x >= a.z ? (d.x > 0 ? 0 : 1) : (a.y >= a.z ? (d.y > 0 ? 2 : 3) : (d.z > 0 ? 4 : 5));
+        float4 cp = mul(_PLVP[(int)(j * 6 + f)], float4(wpos, 1));
+        float2 uv = cp.xy / cp.w * 0.5 + 0.5;
+        float h = 0.5 * _PLAtlas.y;
+        uv = clamp(uv, h, 1 - h);
+        float2 tile = float2(fmod(f, 3.0), floor(f / 3.0) + 2.0 * j);
+        float2 auv = (tile + uv) * _PLAtlas.zw;
+        float bias = 2.5 + dist * 0.025;
+        float s = tex2Dlod(_PLShadow, float4(auv, 0, 0)).r;
+        return dist - bias <= s ? 1.0 : 0.0;
+    }
+
+    // dev7: dynamic lights with the real normal (walls facing away get little), point shadows, soft saturation
+    float3 PointLights(float3 wpos, float3 n, bool thing)
+    {
+        float3 add = 0;
+        float3 cam = float3(_View.x, _View.z, _View.y);
+        float3 nn = normalize(n);
+        if (dot(nn, cam - wpos) < 0) nn = -nn;          // two-sided surfaces: the side the camera sees
+        [loop] for (int j = 0; j < 4; j++)
+        {
+            if (j >= (int)_PLCount) break;
+            float3 d = wpos - _PLPos[j].xyz;
+            float r = _PLPos[j].w;
+            float dist2 = dot(d, d);
+            if (dist2 >= r * r) continue;
+            float att = 1.0 - dist2 / (r * r); att *= att;
+            float dist = sqrt(dist2);
+            float3 l = -d / max(dist, 0.001);
+            float ndl = thing ? 0.8 : saturate(dot(nn, l)) * 0.85 + 0.15;
+            float sh = _PLCol[j].w >= 0 ? PointShadow(_PLCol[j].w, wpos, d, dist) : 1.0;
+            add += _PLCol[j].rgb * att * ndl * sh;
+        }
+        return add / (1.0 + add);
+    }
+
     float4 Shade(v2f i, bool masked)
     {
         float2 t = i.rect.x < -2.5 ? float2(i.uv.x / 255.0, 1) : AtlasTexel(i.uv, i.rect);
@@ -166,7 +214,13 @@ Shader "Rekkr/Remaster/RemasterWorld"
         float3 c = Lit(floor(t.r * 255.0 + 0.5), row);
         float cls = flat ? fmod(i.info.z, 8.0) : 0;
         if (_SunDir.w > 0.5 && i.info.w > 0.5 && !fb) c *= SunLight(i.wpos, i.n, kind);
-        return float4(c, Code(i.fz, cls) / 255.0);
+        if (_PLCount > 0.5 && !fb && _Light.y < 0.5)
+        {
+            float3 add = PointLights(i.wpos, i.n, thing);
+            c += c * add * 1.2 + add * 0.025;
+        }
+        // dev7: the 3D weapon (extruded psprite, _Inst.z = 1) keeps the weapon G-buffer code 249
+        return float4(c, (_Inst.z > 0.5 ? 249.0 : Code(i.fz, cls)) / 255.0);
     }
     ENDCG
 
@@ -248,21 +302,51 @@ Shader "Rekkr/Remaster/RemasterWorld"
             float4 frag(v2f i) : SV_Target { return Shade(i, true); }
             ENDCG
         }
-        Pass // 5 spectre fuzz: darken what is behind with a flickering column pattern (keeps alpha)
-        {
+        Pass // 5 spectre: dev7 refraction — the scene behind, bent by a moving ripple and a little darker
+        {      // (dev6 only darkened it with the Doom fuzz pattern); alpha (G-buffer code) is kept
             Cull Off ZWrite Off ZTest LEqual
-            Blend DstColor Zero
             ColorMask RGB
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            sampler2D _Behind;
             float4 frag(v2f i) : SV_Target
             {
                 float2 t = AtlasTexel(i.uv, i.rect);
                 clip(t.g - 0.5);
-                float2 p = i.sp.xy / i.sp.w * _RTSize.xy;
-                float n = frac(sin(dot(floor(p * float2(1.0, 0.5)) + floor(_Light.w * 35.0), float2(12.9898, 78.233))) * 43758.5453);
-                return float4((0.62 + 0.18 * n).xxx, 1);
+                float2 suv = i.sp.xy / i.sp.w;
+                float tm = _Light.w;
+                // refraction offset from the sprite's own texture (its shape) + a time ripple, ~1.5 % of the view
+                float shape = t.r - 0.5;
+                float2 off = float2(sin(i.uv.y * 0.35 + tm * 5.0) + shape * 2.0, cos(i.uv.x * 0.3 + tm * 4.3)) * 0.012;
+                float3 behind = tex2Dlod(_Behind, float4(suv + off, 0, 0)).rgb;
+                float n = frac(sin(dot(floor(suv * _RTSize.xy * float2(1.0, 0.5)) + floor(tm * 35.0), float2(12.9898, 78.233))) * 43758.5453);
+                return float4(behind * (0.72 + 0.12 * n), 1);
+            }
+            ENDCG
+        }
+        Pass // 6 dev7 point-light shadow caster: distance to the light into an RFloat tile
+        {
+            Cull Off ZWrite On ZTest LEqual
+            CGPROGRAM
+            #pragma vertex vpl
+            #pragma fragment fpl
+            struct pl2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; nointerpolation float4 rect : TEXCOORD1; float3 wpos : TEXCOORD2; };
+            pl2f vpl(appdata v)
+            {
+                pl2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.wpos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.uv = v.uv0.xy;
+                o.rect = v.uv0.z >= 0 ? Slot(v.uv0.z) : float4(v.uv0.z, 0, 1, 1);
+                return o;
+            }
+            float4 fpl(pl2f i) : SV_Target
+            {
+                if (_PLCaster.w > 0.5 && i.rect.x > -2.5) { float2 t = AtlasTexel(i.uv, i.rect); clip(t.g - 0.5); }
+                float dl = length(i.wpos - _PLCaster.xyz);
+                clip(dl - 28.0);   // the light's own thing (fireball, torch sprite around it) casts no shadow
+                return float4(dl, 0, 0, 1);
             }
             ENDCG
         }

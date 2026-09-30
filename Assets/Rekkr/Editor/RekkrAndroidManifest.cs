@@ -25,6 +25,16 @@ public sealed class RekkrAndroidManifest : IPostGenerateGradleAndroidProject
             var app = xml.IndexOf("<application");
             if (app > 0) xml = xml.Insert(app, "<uses-permission android:name=\"android.permission.VIBRATE\" />");
         }
+        // dev7 save backup: transparent helper activity for the document picker (Plugins/Android/RekkrDocs.java).
+        if (!xml.Contains("com.ayoub.rekkr.RekkrDocs"))
+        {
+            var endApp = xml.LastIndexOf("</application>");
+            if (endApp > 0) xml = xml.Insert(endApp,
+                "<activity android:name=\"com.ayoub.rekkr.RekkrDocs\" android:exported=\"false\" " +
+                "android:theme=\"@android:style/Theme.Translucent.NoTitleBar\" " +
+                "android:configChanges=\"orientation|screenSize|keyboardHidden|screenLayout|uiMode\" />");
+            else Debug.LogWarning("[RekkrManifest] no </application> for RekkrDocs");
+        }
         if (xml.Contains("com.google.intent.action.TEST_LOOP")) { File.WriteAllText(manifest, xml); return; }
         var launcher = xml.IndexOf("android.intent.category.LAUNCHER");
         if (launcher < 0) { Debug.LogWarning("[RekkrManifest] no launcher activity"); return; }

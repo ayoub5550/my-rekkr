@@ -16,7 +16,7 @@ using UnityEngine.Networking;
 
 public sealed partial class RekkrApp : MonoBehaviour
 {
-    public const string Version = "0.6.0";
+    public const string Version = "0.7.0";
 
     private static readonly string[] dataFiles = { "rekkr.wad", "rekkr-compat.wad", "TimGM6mb.sf2", "GeneralUser-GS.sf2" };
     private const int QuickSlot = 8;   // doomsav8.dsg — not shown in the 6-slot Doom menu
@@ -299,21 +299,31 @@ public sealed partial class RekkrApp : MonoBehaviour
             // the software renderer still draws the 2D (HUD, menus, weapon) and wipes.
             var levelGame = RekkrSettings.Remaster && RekkrSettings.RemasterAllowed && !Doom.Wiping ? GpuRenderer.LevelGame(Doom) : null;
             ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting || levelGame != null;
+            if (levelGame != null && gpu != null) gpu.PrepareWeapon(levelGame.World.DisplayPlayer);   // dev7 3D weapon
+            else { ThreeDRenderer.GpuWeaponLayer[0] = ThreeDRenderer.GpuWeaponLayer[1] = false; }
             ThreeDRenderer.WorldPassOff = levelGame != null;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));
             ThreeDRenderer.WorldPassOff = false;
             video.Override = null;
+            // dev7: the lights of this frame are gathered once, before the GPU pass (Remaster lights them per pixel)
+            WorldFx.RemasterLights = levelGame != null && RekkrSettings.DynLights;
+            if (WorldFx.Active)
+            {
+                worldFx ??= new WorldFx(content);
+                worldFx.PrepareLights(ThreeDRenderer.TrueColor ? GpuRenderer.LevelGame(Doom) : null, Fixed.FromFloat(Mathf.Clamp01(frac)));
+            }
             if (levelGame != null)
             {
                 if (gpu == null) { GpuRenderer.VoxelDir = Path.Combine(Application.persistentDataPath, "voxels"); gpu = new GpuRenderer(content); }
-                video.Override = gpu.Render(video, levelGame, Fixed.FromFloat(Mathf.Clamp01(frac)));
+                video.Override = gpu.Render(video, levelGame, Fixed.FromFloat(Mathf.Clamp01(frac)), WorldFx.Active ? worldFx : null);
             }
             postThisFrame = PostFx.Active;
             UnityEngine.Texture frameTex = null;
             if (WorldFx.Active)
             {
                 worldFx ??= new WorldFx(content);
-                frameTex = worldFx.Process(video, Doom, InLevel && !Doom.Game.World.AutoMap.Visible, Fixed.FromFloat(Mathf.Clamp01(frac)));
+                // dev7 fix: effects on every 3D level view (live game, demo playback, title demos), not only the live game
+                frameTex = worldFx.Process(video, ThreeDRenderer.TrueColor ? GpuRenderer.LevelGame(Doom) : null, Fixed.FromFloat(Mathf.Clamp01(frac)));   // G-buffer only in true colour
             }
             else ThreeDRenderer.SkyDriftBam = 0;
             lastShownFrame = frameTex != null ? frameTex : video.FrameTexture;

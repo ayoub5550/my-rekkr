@@ -1,11 +1,11 @@
 // my-rekkr dev5 — "Masterpiece" world effects on the software-rendered frame, driven by the G-buffer
 // code the renderer stores in the frame's alpha (docs/DEV5.md §2). Works in FRAME space on the
 // transposed column-major frame texture (u = row / H, v = column / W), before the upscale.
-// Pass 0: world  (sky clouds + sun, water reflections, hot liquids, lights, AO, fog, weather)
+// Pass 0: world  (sky clouds + sun, water reflections, hot liquids, lights, AO, fog, lightning)
 // Pass 1: sun rays (radial blur of the bright sky, half resolution)
 // Pass 2: downsample (4 taps) for depth of field
 // Pass 3: composite (world + rays + DoF), alpha = G-buffer code kept for later passes
-// Pass 4: particles (quads in frame space, depth-tested against the G-buffer)
+// Pass 4: particles + dev7 3D weather (quads in frame space, depth-tested against the G-buffer)
 Shader "Rekkr/World"
 {
     Properties
@@ -37,6 +37,7 @@ Shader "Rekkr/World"
     float4 _Cloud;      // rgb tint, coverage
     float4 _CloudP;     // wind x, wind y, speed, on (0/1)
     float4 _Weather;    // type (0 none, 1 rain, 2 snow, 3 embers, 4 dust), intensity*outdoor, lightning, rainOnWater
+    float4 _FogP;       // dev7: x = outdoor (player under the sky, smoothed)
     float4 _Fx;         // water on, AO strength, lights on, hot on
     float4 _Fx2;        // fog on, DoF on, dof start (units), debug view
     float4 _LightPos[8];  // view space x (right), y (up), z (forward), radius
@@ -127,58 +128,6 @@ Shader "Rekkr/World"
         return _Cam.xy + (fwd * v + right * u) * 41.0;
     }
 
-    float3 WeatherLayer(float x, float y, float z)
-    {
-        int type = (int)(_Weather.x + 0.5);
-        float inten = _Weather.y;
-        if (type == 0 || inten <= 0.001) return 0;
-        float3 d = WorldDir(x, y);
-        float yaw = atan2(d.y, d.x);
-        float el = (_ViewP.y - y - 0.5) / _ViewP.z;
-        float3 acc = 0;
-        float t = _ViewP.w;
-        [unroll] for (int L = 0; L < 3; L++)
-        {
-            float depth = L == 0 ? 60.0 : (L == 1 ? 150.0 : 380.0);
-            if (z < depth) continue;
-            float sc = L == 0 ? 1.0 : (L == 1 ? 1.9 : 3.4);
-            float2 p = float2(yaw * 40.0 * sc, el * 30.0 * sc);
-            if (type == 1) // rain: slanted streaks
-            {
-                p.y += t * (9.0 + L * 2.0) * sc * 0.35; p.x += p.y * 0.18;
-                float2 cell = floor(p * float2(1.0, 0.25)); float2 f = frac(p * float2(1.0, 0.25));
-                float h = Hash(cell + L * 7.0);
-                float streak = smoothstep(0.08, 0.0, abs(f.x - h)) * smoothstep(0.0, 0.3, f.y) * smoothstep(1.0, 0.6, f.y);
-                acc += streak * step(0.55, Hash(cell * 1.7 + 3.0)) * float3(0.75, 0.8, 0.9) * (0.5 - L * 0.12);
-            }
-            else if (type == 2) // snow
-            {
-                p.y += t * (0.9 + L * 0.3) * sc * 0.4; p.x += sin(t * 0.7 + p.y * 0.3 + L) * 0.35;
-                float2 cell = floor(p); float2 f = frac(p) - 0.5;
-                float2 o = float2(Hash(cell), Hash(cell + 9.1)) - 0.5;
-                float r = length(f - o * 0.6);
-                acc += smoothstep(0.12, 0.02, r) * step(0.5, Hash(cell + 2.3)) * float3(0.95, 0.97, 1.0) * (0.75 - L * 0.18);
-            }
-            else if (type == 3) // embers: rising, flickering
-            {
-                p.y -= t * (0.8 + L * 0.3) * sc * 0.5; p.x += sin(t * 1.3 + p.y * 0.5 + L * 2.0) * 0.4;
-                float2 cell = floor(p); float2 f = frac(p) - 0.5;
-                float2 o = float2(Hash(cell), Hash(cell + 4.7)) - 0.5;
-                float r = length(f - o * 0.6);
-                float fl = 0.6 + 0.4 * sin(t * 9.0 + Hash(cell) * 30.0);
-                acc += smoothstep(0.09, 0.0, r) * step(0.72, Hash(cell + 1.9)) * float3(1.0, 0.45, 0.12) * fl * (1.2 - L * 0.3);
-            }
-            else // dust motes, lit by the sun
-            {
-                p += float2(sin(t * 0.21 + L), cos(t * 0.17 + L * 2.0)) * 1.3;
-                float2 cell = floor(p * 0.8); float2 f = frac(p * 0.8) - 0.5;
-                float2 o = float2(Hash(cell), Hash(cell + 6.1)) - 0.5;
-                float r = length(f - o * 0.6);
-                acc += smoothstep(0.07, 0.0, r) * step(0.78, Hash(cell + 8.3)) * (_SunCol.rgb * 0.7 + 0.2) * (0.6 - L * 0.15);
-            }
-        }
-        return acc * inten;
-    }
     ENDCG
 
     SubShader
@@ -208,7 +157,6 @@ Shader "Rekkr/World"
                 if (code == 248)
                 {
                     c = SkyShade(x, y, c);
-                    c += WeatherLayer(x, y, 100000.0);
                     return float4(c, src.a);
                 }
 
@@ -308,9 +256,10 @@ Shader "Rekkr/World"
                         float att = saturate(1.0 - dot(dv, dv) / (r * r));
                         add += _LightCol[L].rgb * att * att;
                     }
-                    // dev6: capped (a muzzle flash right in front of a wall blew the whole view out to white)
-                    add = min(add, 0.5);
-                    c += c * add * 1.8 + add * 0.05;
+                    // dev7: soft-saturated and much weaker (dev6 capped at 0.5 x 1.8 = up to x1.9 brightness,
+                    // which the owner called "horribly strong"); intensity per source comes from WorldFx
+                    add = add / (1.0 + add);
+                    c += c * add * 1.2 + add * 0.025;
                 }
 
                 // ---- ambient occlusion (solid pixels)
@@ -334,12 +283,18 @@ Shader "Rekkr/World"
                 // ---- fog + sun scattering
                 if (_Fx2.x > 0)
                 {
+                    // dev7: the fog is lit like the scene (owner: "the fog is bad" — dev5 painted one flat haze
+                    // colour over everything, so dark rooms turned light blue/red). Indoors the fog colour follows
+                    // the local brightness (dark stays dark) and is thinner; under the open sky it is the full
+                    // atmospheric colour with the sun glow (distant hills fade into the air).
                     float f = 1.0 - exp(-z * _FogCol.a);
                     float3 d = WorldDir(x, y);
                     float3 fc = _FogCol.rgb + _SunCol.rgb * pow(saturate(dot(d, _Sun.xyz)), 8) * 0.18 * _Sun.w;
-                    c = lerp(c, fc, f * 0.85);
+                    float lum = dot(c, float3(0.3, 0.55, 0.15));
+                    float lit = lerp(saturate(lum * 2.0 + 0.03), 1.0, _FogP.x);
+                    c = lerp(c, fc * lit, f * lerp(0.5, 0.8, _FogP.x));
                 }
-                c += WeatherLayer(x, y, z);
+                // dev7: rain/snow/embers/dust are 3D particles now (WorldFx, pass 4), not a screen pattern
                 c *= 1.0 + _Weather.z * 0.35;
                 return float4(c, src.a);
             }
