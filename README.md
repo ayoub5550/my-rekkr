@@ -22,6 +22,15 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
   GPU هاتف POCO F3).
 * يدعم لوحة المفاتيح ويد التحكم (gamepad) أيضاً.
 
+## الجديد في dev8 (0.8.0) — أنيميشن حديث بروح كلاسيكية
+
+* **تبويب «الأنيميشن» جديد في الإعدادات:** كلاسيكي (الأصلي 100٪) / حديث (الافتراضي) / مخصص.
+* **سلاح ناعم:** يتحرك كل إطار على 60/90/120 Hz بدل 35 مرة في الثانية، مع تمايل وتنفس، وميلان وقت المشي الجانبي، وانخفاض عند الهبوط، وارتداد لكل سلاح، وتبديل انسيابي.
+* **كاميرا حية:** اهتزاز مع الانفجارات، وارتداد عند الإصابة، وعلامات حمراء تبيّن اتجاه الضرر، وميلان جانبي في Remaster (مطفأ افتراضياً).
+* **عالم حي:** أغراض تطفو وتلمع، ووميض الوحش عند الإصابة، وشظايا وغبار، ودماء أغنى، ودخان وجمر وحطام، وانتقال ناعم بين صور السوائل.
+* **واجهة:** انتقالات للوحة الإعدادات وعجلة الأسلحة، ونبض أرقام الواجهة. أزرار اللمس بقيت كما هي.
+* **بصري فقط:** اللعب والعروض والحفظ تبقى أصلية 100٪. التفاصيل الكاملة في [docs/DEV8.md](docs/DEV8.md).
+
 ## الجديد في dev2 (0.2.0)
 
 * **شاشة عريضة (Widescreen):** اللعبة تملأ شاشة 20:9 بزاوية رؤية أوسع (Hor+)، مع خيار 4:3 الأصلي.
@@ -54,6 +63,7 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
 | Layout | Button layout editor (drag + per-button size, reset) |
 | Music | GeneralUser GS (high) or TimGM6mb (classic) SoundFont |
 | Language | English / Arabic UI (RTL settings, Arabic button labels) |
+| Animation (0.8.0) | ANIMATION tab: Classic / Modern / Custom — smooth weapon, sway, recoil, shake, damage marks, floating pickups, hit flash, impacts, smoke, liquid cross-fade (visual only) |
 | Other | Gamepad + keyboard, pause→menu on app switch, Firebase Game Loop autopilot (2 scenarios) |
 
 ## Build

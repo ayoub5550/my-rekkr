@@ -1,7 +1,15 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-30 (v0.7.0, dev7).
+Last updated: 2026-09-30 (v0.8.0, dev8).
 
+> **dev8 (v0.8.0) — merged into `main`** (owner approval 2026-09-30): the animation layer, "modern but still classic",
+> all **visual only** (HeadlessTest golden PASS). New settings tab **ANIMATION** (Classic = original / Modern = default /
+> Custom): smooth per-frame weapon (was 35 Hz), sway / breathing / strafe tilt / landing dip, per-weapon recoil, eased
+> switch, camera shake + hit kick + damage-direction marks, strafe lean (Remaster only, off), floating / glowing pickups,
+> monster hit flash, impact chips / dust, richer blood, explosion smoke / embers / debris, liquid cross-fade, panel /
+> wheel / HUD-number transitions. **Touch buttons are not animated (owner decision).** New test scenario 12. Plan,
+> settings table, code map and measurements: [`docs/DEV8.md`](docs/DEV8.md). Open item: physical r8q Test Lab run.
+>
 > **dev7 (v0.7.0) — the first release merged into `main`** (owner approval 2026-09-30): fixes for the owner's 0.6.0
 > reports (settings not applied on demos / smooth lighting in Remaster, far too strong dynamic lights, bad fog and
 > weather), Remaster point-light shadows + 3D weapon, save backup (document picker), full gamepad + remap. Plan, status
@@ -80,6 +88,11 @@ v0.1.0 checkpoint:
   over it). Gamepad and the document picker are **not tested on hardware** (no pad / no person on Test Lab).
   r8q: classic ≈ 99–103 fps; Remaster all-maps 73.7 fps at thermal 3, 54.8 fps at thermal 4 (E1M7/E4M9/E2M7 the
   heaviest, 43–50 fps when hot). Point-light shadows follow `GpuRenderer.ShadowTriBudget` (240k / level tris).
+
+- v0.8.0 (dev8), merged into `main`: animation layer (see the top note and `docs/DEV8.md` §5–§7). APK 101,797,141 B,
+  versionCode 8, same keystore. Linux scenario 12: weapon "still" frames while walking 54.5 % → 0 % (software), 43.5 % → 0 %
+  (Remaster). Test Lab virtual MediumPhone.arm/33 (S12, S1, S11): Passed, 0 `E Unity`, 36/36 maps errors=0.
+  **Physical r8q run not done yet** (Spark quota used up on release day).
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
@@ -185,6 +198,12 @@ The same setup is used for my-librequake (its §9).
 - dev7: weather is world particles (sky sectors only); the old screen-space `WeatherLayer` is gone — do not bring it back.
 - dev7: a Doom sight check from the render side (`VisibilityCheck.CheckSight`) only bumps `validcount`; it does not
   touch the RNG or the demo/golden results (HeadlessTest PASS).
+- dev8: animation state is render-only (`AnimHooks`, `Mobj.AnimFlash/AnimLastHealth`, `PlayerSpriteDef.Old*`,
+  `Specials.*Next`); never let game code read it and never save it. Classic style must stay pixel-identical.
+- dev8: REKKR's bow has **no muzzle-flash state** — detect firing from ammo spent / entering AttackState. A kill clears
+  MF_SHOOTABLE on the same tic as the health drop — track health once the thing was shootable.
+- dev8: `RekkrWorld.shader` pass 6 = alpha-blended solid particles (added at the end, see the pass-order rule above).
+- dev8: interpolate the weapon only when the sprite is the same and the step ≤ 20 px, so state offsets are never smeared.
 - Do not use Freedoom as the IWAD. All content except the two patches stays 100 % REKKR.
 - No commercial packaging (CC BY-NC).
 
@@ -197,6 +216,8 @@ dev2 did the soundfont, widescreen, button editor, haptics and quick save.
   - A human playtest on a POCO F3, including gyro direction (yaw and the new pitch) and audio.
   - Fewer gen0 GCs on IL2CPP. Run the weak-device test and add a GPU-class rule for auto-Masterpiece (DEV5 open items).
   - dev6: the GPU 3D renderer and voxel things (`docs/DEV6.md`).
+- dev8 scenario `12`: weapon smoothness Classic vs Modern (software + Remaster), recoil, barrel explosion, E1M2 fight
+  (spawned Troop + Possessed), liquid frames; grep `anim8` in the log.
 - Test scenarios: `REKKR_SCENARIO=1` (play + saves + haptics), `2` (Continue + E1–E4 + Arabic), `5` (Masterpiece tour,
   weather, wheel, automap, Enhanced vs Masterpiece). dev5 runs used `SCENARIOS=1,2,5 FTL_TIMEOUT=15m`.
   `ftl_gameloop.sh` runs both by default (`SCENARIOS=1,2`, `FTL_TIMEOUT=12m`).

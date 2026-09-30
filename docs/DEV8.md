@@ -66,12 +66,108 @@ keeping the game classic". 15:03 UTC: "the buttons are fine as they are; the res
 | 4 | World: floating + glowing pickups, monster hit flash, impact chips/dust, richer blood, explosion smoke/embers/debris | ✅ 2026-09-30 | shots, no errors |
 | 5 | UI: panel + wheel transitions, HUD pops (touch buttons untouched) | ✅ 2026-09-30 | shots |
 | 6 | Tests: scenario 12 (smoothness metric Classic vs Modern, events, explosion, fight, liquid frames); HeadlessTest golden | ✅ 2026-09-30 HeadlessTest golden 176 frames identical, RESULT PASS | PASS |
-| 7 | Android 0.8.0 build, Test Lab r8q (1, 11, 12), video; release on the owner's OK | 🚧 (Next: physical r8q run — the Spark quota of 5 physical runs/day was used up on 2026-09-30; virtual MediumPhone.arm/33 run of scenarios 12, 1, 11: Passed, 0 `E Unity`, 36/36 maps errors=0, anim8 still_pct 56.1 → 0.0, recoil fires=3, explosion particles=60; Remaster not available on the emulator, fps meaningless ≈ 8–10) | Passed, 0 `E Unity`, fps ≈ dev7 |
+| 7 | Android 0.8.0 build, Test Lab (1, 11, 12), merge into `main` + release v0.8.0 on the owner's OK | ✅ 2026-09-30 owner OK («ارفعها الى المستودع في main»); virtual MediumPhone.arm/33: Passed, 0 `E Unity`, 36/36 maps errors=0; physical r8q run still to do (Spark quota used up 2026-09-30) — see §6 | Passed, 0 `E Unity` |
 
 Legend: ⬜ not started · 🚧 in progress (Next: …) · ✅ done · ⏭ deferred (reason).
 
-## 5. Log
+## 5. What v0.8.0 contains — full description / الوصف الكامل
+
+### 5.1 للمالك (عربي)
+
+- **تبويب جديد في الإعدادات: الأنيميشن (ANIMATION)** بثلاث صفحات. أول خيار هو **نمط الأنيميشن**:
+  - **كلاسيكي (الأصلي):** كل الإضافات مطفأة، والصورة مطابقة 100٪ للعبة الأصلية.
+  - **حديث (الافتراضي):** كل الإضافات تشتغل بقوة «عادي»، ما عدا الميلان الجانبي.
+  - **مخصص:** يتحول له النمط تلقائياً أول ما تغيّر أي خيار بنفسك.
+- **السلاح:**
+  - **حركة ناعمة:** يتحرك السلاح كل إطار على 60/90/120 Hz. قبل كانت حركته 35 مرة في الثانية فقط، فيبان متقطع.
+  - **تمايل وتنفس:** السلاح يتأخر شوي عن التفاتك، ويميل وقت المشي الجانبي، وينخفض لما تنزل من قفزة.
+  - **ارتداد خاص بكل سلاح.**
+  - **تبديل سلاح انسيابي:** السلاح يطلع وينزل بنفس المدة الأصلية، لكن بحركة ناعمة.
+- **الكاميرا:**
+  - اهتزاز مع الانفجارات القريبة.
+  - ارتداد خفيف لما تنصاب.
+  - علامات حمراء تبيّن اتجاه اللي ضربك.
+  - ميلان جانبي وقت المشي الجانبي: في Remaster فقط، ومطفأ افتراضياً.
+- **العالم:**
+  - الأغراض تطفو وتلمع.
+  - الوحش يومض لما تصيبه.
+  - شظايا وغبار مكان الضربة.
+  - دماء أغنى تستقر على الأرض.
+  - دخان وجمر وحطام مع الانفجارات.
+  - انتقال ناعم بين صور السوائل المتحركة: في وضع البرمجيات (software) للأرضيات فقط، وفي Remaster للأرضيات والجدران.
+- **الواجهة:**
+  - لوحة الإعدادات تفتح بتلاشٍ وتستقر.
+  - عجلة الأسلحة تظهر بحركة.
+  - الأرقام تنبض في الواجهة الكاملة (Fullscreen HUD).
+  - **أزرار اللمس ما تغيّرت، بطلب منك.**
+  - شريط الحالة الكلاسيكي وانتقال الذوبان (melt) بين الشاشات بقيوا كما هم.
+- **كله بصري فقط:** منطق اللعب والعروض والحفظ ما تغيّرت، واختبار المحرك طابق 176 إطاراً مع الأصل.
+- **الشظايا والدماء** تحتاج خيار **الجسيمات (Particles)** في تبويب الرسوميات.
+
+### 5.2 Settings reference
+
+| Setting (EN / AR) | Key | Values | Modern | Classic | Page |
+|---|---|---|---|---|---|
+| Animation style / نمط الأنيميشن | (derived) | Classic / Modern / Custom | Modern | Classic | 1 |
+| Smooth weapon motion / حركة سلاح ناعمة | `an_smooth` | on/off | on | off | 1 |
+| Weapon sway & breathing / تمايل السلاح والتنفس | `an_motion` | off / normal / strong | normal | off | 1 |
+| Weapon recoil / ارتداد السلاح | `an_recoil` | on/off | on | off | 1 |
+| Eased weapon switch / تبديل سلاح انسيابي | `an_ease` | on/off | on | off | 1 |
+| Smooth liquid animation / أنيميشن سوائل ناعم | `an_liquids` | on/off | on | off | 1 |
+| Camera shake / اهتزاز الكاميرا | `an_shake` | off / normal / strong | normal | off | 2 |
+| Hit kick / ارتداد عند الإصابة | `an_kick` | on/off | on | off | 2 |
+| Damage direction / اتجاه الضرر | `an_dmgdir` | on/off | on | off | 2 |
+| Strafe lean (Remaster) / ميلان جانبي | `an_roll` | on/off (shown only if Remaster is allowed) | **off** | off | 2 |
+| Floating pickups / أغراض طافية | `an_pickups` | on/off | on | off | 2 |
+| Monster hit flash / وميض الوحش | `an_flash` | on/off | on | off | 2 |
+| Impacts, smoke & debris / شظايا ودخان وحطام | `an_impacts` | on/off (needs Particles) | on | off | 3 |
+| Richer blood / دماء أغنى | `an_blood` | on/off (needs Particles) | on | off | 3 |
+| Menu & HUD animation / أنيميشن القوائم والواجهة | `an_ui` | on/off | on | off | 3 |
+
+The style is not stored: `RekkrSettings.MatchAnimStyle()` derives it from the 14 values at load. The GYRO tab
+(was MOTION) and DISPLAY got shorter labels so that 5 tabs fit.
+
+### 5.3 Code map
+
+| File | Change |
+|---|---|
+| `Engine/Video/AnimHooks.cs` (new) | Static render-side values + `WeaponPos()` (lerp / smoothstep raise-lower / offsets), `IsRaiseLower()` |
+| `Scripts/AnimFx.cs` (new) | Event detection per tic + springs per frame; `AnimFx.Current`; counters used by scenario 12 |
+| `Scripts/RekkrApp.Anim8.cs` (new) | Test scenario 12 |
+| `Engine/Doom/Game/Player.cs`, `World/PlayerSpriteDef.cs` | `OldSx/OldSy/OldState/OldSprite` saved per tic; cleared on `DisableFrameInterpolation` |
+| `Engine/Doom/World/Mobj.cs` | `AnimFlash`, `AnimLastHealth` (not saved) |
+| `Engine/Doom/World/Specials.cs` | `FlatTranslationNext/TextureTranslationNext`, `AnimSpeed`, `AnimBlend(frac)` |
+| `Engine/Video/ThreeDRenderer.cs`, `Renderer.cs`, `DrawScreen.cs` | Weapon position, view offsets, fractional pitch shear, pickup lift/glow, hit flash (FullBright), liquid `AnimTex/AnimBase` + blended `WriteChunk` |
+| `Engine/Video/StatusBarRenderer.cs` | Fullscreen-HUD number pops |
+| `Engine/Remaster/ThingBuilder.cs`, `Scripts/Remaster/GpuRenderer.cs`, `RemasterWorld.shader` | Pickup lift/glow, 3D weapon roll, camera roll, `_Lookup2/_AnimBlend` cross-fade |
+| `Resources/Rekkr/RekkrWorld.shader`, `Scripts/WorldFx.cs` | Pass 6 alpha-blended solid particles (chips, dust, blood that rests, smoke, embers, debris), 900 max particles |
+| `Scripts/RekkrSettings.cs`, `Loc.cs`, `RekkrApp.UI.cs`, `RekkrApp.cs` | Settings, EN/AR strings, ANIMATION tab, damage marks, wheel/panel transitions, version 0.8.0 |
+
+## 6. Measurements
+
+| Test | Result |
+|---|---|
+| HeadlessTest (engine parity) | golden 176 frames identical, DEMO1–4, RESULT PASS |
+| Linux scenario 12 (llvmpipe) | weapon "still" frames while walking: software 54.5 % → 0 %, Remaster 43.5 % → 0 %; recoil fires=2; barrel shake 0.48; errors=0 |
+| Test Lab virtual MediumPhone.arm/33, scenarios 12, 1, 11 (2026-09-30) | **Passed**, 0 `E Unity`, 0 FATAL. S12: still 56.1 % → 0.0 %, recoil fires=3, explosion particles=60, liquid E1M1 sector 2 flat 148, errors=0. S1: menus, autosave, quicksave/quickload, look ±75°, jumps=6, haptics=65. S11: 36/36 maps errors=0 (software; Remaster is not available on the emulator). fps ≈ 8–10 (emulator, not meaningful) |
+| Test Lab physical r8q/33 | **not run yet**: the Spark quota (5 physical runs/day) was used up on 2026-09-30. Next: `OUT=… SCENARIOS=1,11,12 FTL_TIMEOUT=30m tools/sandbox/ftl_gameloop.sh Builds/REKKR-0.8.0.apk` and compare with dev7 (classic 99–103 fps; Remaster all-maps 73.7 fps at thermal 3) |
+
+APK `REKKR-0.8.0.apk`: 101,797,141 B, versionCode 8, versionName 0.8.0, minSdk 24, arm64-v8a + armeabi-v7a,
+cert SHA-256 `768de491…bab8` (installs over 0.6.0/0.7.0), sha256
+`d26ce38e0b97b436207538e12fcbc60ef490352806cc8d6ad64ea802810b510d`.
+
+## 7. Limits and not verified
+
+- Smoothness on a real phone at 120 Hz has not been judged by a human yet; physical Test Lab run pending (§6).
+- Camera roll exists only in Remaster (the column renderer cannot roll) and is off by default.
+- In software, only flats cross-fade (walls do not); Remaster does both.
+- Impacts / blood / smoke need the Particles setting (hint shown on page 3).
+- Fight counters on the emulator: hits=0 while monster_flashes=1 — the counter misses some hits at 9 fps; the flash works.
+
+## 8. Log
 
 - 2026-09-30: the sandbox has 17 cores; `nproc` prints 1 only because `OMP_NUM_THREADS=1` is set (use `nproc --all`).
 - 2026-09-30: REKKR's bow (pistol slot) has no muzzle-flash psprite state — fire detection must not rely on it.
 - 2026-09-30: a kill clears MF_SHOOTABLE on the same tic the health drops — track health once a thing was shootable.
+- 2026-09-30: when the physical quota is exhausted (`TEST_QUOTA_EXCEEDED`), a virtual `MediumPhone.arm` v33 run (separate quota) still catches crashes and errors.
+- 2026-09-30: owner approved the merge into `main` and the v0.8.0 release.
