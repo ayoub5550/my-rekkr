@@ -57,6 +57,8 @@ namespace ManagedDoom.UnityPort
         public static bool Remaster;             // dev6: GPU 3D renderer ("Remaster") instead of the software 3D view
         public static int RemasterThings = 1;    // dev6: 0 flat billboards (original sprites), 1 extruded 3D voxel sprites
         public static bool RemasterShadows = true; // dev6: sun shadow map in outdoor areas
+        public static int DarkAreas = 1;         // dev6: 0 original sector light, 1 lifted, 2 bright (E3 has many light-0 rooms)
+        public static readonly int[] DarkAreaFloor = { 0, 112, 144 };
 
         // Preset table: resolution, dynres, smooth light, bloom, vignette, grade, sharpen, crt, side fill, threads, dev5 fx
         private static readonly (int res, bool dyn, bool light, int bloom, int vig, int grade, bool sharp, bool crt, bool side, int threads, bool fx)[] Presets =
@@ -152,17 +154,19 @@ namespace ManagedDoom.UnityPort
             Remaster = PlayerPrefs.GetInt("gfx_remaster", 0) == 1;
             RemasterThings = Mathf.Clamp(PlayerPrefs.GetInt("rm_things", 1), 0, 1);
             RemasterShadows = PlayerPrefs.GetInt("rm_shadows", 1) == 1;
+            DarkAreas = Mathf.Clamp(PlayerPrefs.GetInt("gfx_dark", 1), 0, 2);
             ColorGrade = Mathf.Clamp(PlayerPrefs.GetInt("gfx_grade", 1), 0, 3);
             // First start (new install): pick a preset for the device (dev5: Masterpiece on 8-core phones).
             var fresh = !PlayerPrefs.HasKey("gfx_preset");
-            if (fresh) ApplyPreset(SystemInfo.processorCount >= 8 ? 3 : SystemInfo.processorCount >= 6 ? 2 : 1);
+            // dev6: Masterpiece also needs a strong GPU (DeviceClass), not only 8 cores.
+            if (fresh) ApplyPreset(ManagedDoom.UnityPort.DeviceClass.AutoPreset(SystemInfo.processorCount, ManagedDoom.UnityPort.DeviceClass.StrongGpu));
             else GfxPreset = PlayerPrefs.GetInt("gfx_preset", 2);
             // dev5: preset 3 used to mean Custom; Custom is now 4 (3 = Masterpiece).
             if (!PlayerPrefs.HasKey("dev5_migrated"))
             {
                 if (!fresh && GfxPreset == 3) GfxPreset = PresetCustom;
                 // Enhanced (the old default) on 8-core phones moves up to Masterpiece once; Custom is kept.
-                if (!fresh && GfxPreset == 2 && SystemInfo.processorCount >= 8) ApplyPreset(3);
+                if (!fresh && GfxPreset == 2 && SystemInfo.processorCount >= 8 && ManagedDoom.UnityPort.DeviceClass.StrongGpu) ApplyPreset(3);
                 PlayerPrefs.SetInt("dev5_migrated", 1);
             }
             // dev4: Enhanced moved from 800 to 600 lines (device measurement); migrate 0.3.0 Enhanced once.
@@ -233,6 +237,7 @@ namespace ManagedDoom.UnityPort
             PlayerPrefs.SetInt("gfx_remaster", Remaster ? 1 : 0);
             PlayerPrefs.SetInt("rm_things", RemasterThings);
             PlayerPrefs.SetInt("rm_shadows", RemasterShadows ? 1 : 0);
+            PlayerPrefs.SetInt("gfx_dark", DarkAreas);
             PlayerPrefs.SetString("lang", Arabic ? "ar" : "en");
             foreach (var c in Editable)
             {

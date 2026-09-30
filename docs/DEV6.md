@@ -171,12 +171,12 @@ New files (suggested):
 | 0 | Branch (from `feat/dev5`), version 0.6.0/6, settings `Renderer: Software/Remaster` (hidden until stage 4). First do the DEV5 "Open items after v0.5.0": the weak-device Test Lab run and the GPU-class rule for auto-Masterpiece | ✅ 2026-09-30 (dev5 weak-device run ⏭: owner tested v0.5.0 on his own phone and said it is not needed; Test Lab quota was also exhausted) | builds; nothing changes visually |
 | 1 | Camera parity: GPU camera that matches the software view (position, angle, pitch, FOV, 1.2 aspect) | ✅ 2026-09-30 | Linux scenario 7: 13 views (E1M1 4 angles + pitch ±40, E2M1, E3M1, E4M1, E1M7) software vs Remaster: 0.2–1.1 % pixels differ (> 40/255), all 1-px edges; projection = LastView (sheared centre, projection px), no Z scale (1.2 applied on display like software) |
 | 2 | Static level mesh: walls (pegging, offsets, masked mids, sky hack), flats (tessellated), textures (atlas/array), faithful Doom lighting shader | ✅ 2026-09-30 | HeadlessTest `dev6`: 36/36 maps build, 0 NaN; sectors traced (LibTess) 23 900+, BSP fallback 63, empty 3 (unreachable dummies); 8k–174k tris/map (E1M7 max), build 3–330 ms desktop. One RG8 atlas 4096×7424 (all 886 textures, 219 flats, all sprite patches). Lighting = vanilla scalelight/zlight in continuous form + fake contrast + extralight + fixed colormaps + damage/bonus palettes |
-| 3 | Dynamic sectors (doors, lifts, crushers, light changes), animated textures/flats, scrolling walls, switches | ⬜ | E1M1 door + lift video; DEMO1 played back with the Remaster view looks right end-to-end |
-| 4 | Things as billboards + weapon billboard; composite into the 3D window; HUD/menus from software; Remaster selectable | ⬜ | DEMO1–4 watchable in Remaster; Linux screenshots; first Test Lab run (fps) |
-| 5 | Modern lighting: sun (per episode, from DEV5) + shadow map for outdoor sectors, point lights (dev5 detection) with ≤ 2 shadowed, AO (GTAO-lite), SSR water, fog | ⬜ | Test Lab r8q ≥ 60 fps at render scale 1.0 or dynres; screenshots |
-| 6 | Extruded sprites (automatic 3D for every monster/item/weapon), cache, worker-thread build | ⬜ | all REKKR sprites extrude without errors (HeadlessTest-like tool); memory ≤ 64 MB cache |
-| 7 | KVX voxel loader + `voxels.txt` mapping (optional packs) | ⬜ | loads a public-domain test KVX; mapping hot-reload |
-| 8 | Polish: spectre refraction, particles/weather from dev5 in 3D, per-device auto preset, settings UI, Arabic strings | ⬜ | full playthrough smoke (autopilot scenario 4: all episodes' first maps in Remaster) |
+| 3 | Dynamic sectors (doors, lifts, crushers, light changes), animated textures/flats, scrolling walls, switches | 🚧 code done 2026-09-30 (per-frame dirty-quad update of heights, side textures/offsets, flat pictures, sector light texture). Linux autopilot tours E1M1–E4M1 look right. Next: door/lift clip on a device video; DEMO1 in Remaster not reviewed yet | E1M1 door + lift video; DEMO1 played back with the Remaster view looks right end-to-end |
+| 4 | Things as billboards + weapon billboard; composite into the 3D window; HUD/menus from software; Remaster selectable | 🚧 code done 2026-09-30 (weapon stays the software psprite, see §9). Linux parity 576 views (36 maps × 4 spread points × 4 angles): no view with > 1 % holes at reachable spots. Next: Test Lab fps | DEMO1–4 watchable in Remaster; Linux screenshots; first Test Lab run (fps) |
+| 5 | Modern lighting: sun (per episode, from DEV5) + shadow map for outdoor sectors, point lights (dev5 detection) with ≤ 2 shadowed, AO (GTAO-lite), SSR water, fog | 🚧 code done 2026-09-30 (sun shadow map; point lights/AO/SSR/fog = dev5 screen-space passes on the GPU G-buffer; point-light shadows ⏭). Next: Test Lab r8q ≥ 60 fps | Test Lab r8q ≥ 60 fps at render scale 1.0 or dynres; screenshots |
+| 6 | Extruded sprites (automatic 3D for every monster/item/weapon), cache, worker-thread build | ✅ 2026-09-30 HeadlessTest `dev6`: 1036 sprite patches extrude, 0 failures, avg 2246 / max 7976 tris; all meshes together 240 MB, so the runtime LRU cache is capped at 64 MB (`GpuRenderer.CacheBudget`). Weapon extrusion ⏭ (§9) | all REKKR sprites extrude without errors (HeadlessTest-like tool); memory ≤ 64 MB cache |
+| 7 | KVX voxel loader + `voxels.txt` mapping (optional packs) | ✅ 2026-09-30 HeadlessTest writes and loads a generated test KVX (8×8×16, 704 voxels, 1200 tris) and parses a mapping; runtime reloads `voxels.txt` when its timestamp changes. No public REKKR voxel pack was tested | loads a public-domain test KVX; mapping hot-reload |
+| 8 | Polish: spectre refraction, particles/weather from dev5 in 3D, per-device auto preset, settings UI, Arabic strings | 🚧 settings pages 3/4 (EN + AR screenshots, no overlap), `DeviceClass` auto preset, Dark areas setting, particles in 3D done; spectre refraction ⏭ (fuzz darkening kept). Next: scenario 6 on Test Lab | full playthrough smoke (autopilot scenario 4: all episodes' first maps in Remaster) |
 | 9 | Build 0.6.0, Test Lab (r8q + weak device), video, release (byte-verified), report | ⬜ | release asset downloaded back: `sha256sum -c` + `cmp` |
 
 Legend: ⬜ not started · 🚧 in progress (Next: …) · ✅ done · ⏭ deferred (reason).
@@ -207,3 +207,44 @@ Legend: ⬜ not started · 🚧 in progress (Next: …) · ✅ done · ⏭ defer
 ## 9. Log of decisions
 - 2026-09-29: built-in pipeline (no URP), GLES3 first; LibTessDotNet for flats; extruded sprites as
   the automatic "voxel look"; KVX for real voxel packs; software renderer kept for 2D and Classic.
+- 2026-09-30: Autopilot scenario for the Remaster tour is **6** (4 is already the soak test) and the
+  parity scenario is **7** (warp + freeze, software vs Remaster shots of the same view).
+- 2026-09-30: Remaster re-uses the dev5 screen-space effects (lights, AO, water SSR, fog, weather,
+  particles) on the GPU G-buffer codes instead of new GPU point lights with cube shadows; only the sun
+  gets a real shadow map (outdoor sectors, 2048², elevation clamped ≥ 40°, off in E3). Point-light
+  shadows are deferred.
+- 2026-09-30: The weapon stays the software psprite (original look, composited over the GPU view);
+  a 3D view-model is deferred.
+- 2026-09-30: One RG8 atlas holds all textures, flats and sprite patches (palette index + alpha).
+- 2026-09-30: New keystore (the dev1–dev5 keystore was lost with the previous sandbox): cert SHA-256
+  `76:8D:E4:91:…:BA:B8`. Owners must uninstall ≤ 0.5.0 once before installing 0.6.0.
+- 2026-09-30 bug fixes reported by the owner on v0.5.0:
+  - "Ripples on the weapon": the water pass's ripple-displaced body sample picked weapon/HUD pixels
+    → it now only uses liquid samples. The depth-of-field blur also bled weapon/HUD colours into the
+    far background (halo/outline around the weapon and status bar) → the DoF source is now a
+    premultiplied "world pixels only" downsample (RekkrWorld pass 5).
+  - Dynamic lights could blow a wall out to white (muzzle flash at a wall) → added light capped.
+  - "Black areas, mostly E3": not a renderer bug. HOM scan (36 maps, free-look pitches) is clean in E3;
+    `dark` scan + `ray` tool show the black is REKKR's own design: many light-0 sectors (E3M6: 36,
+    E3M9: 32, E3M1: 9; E1/E2/E4 almost none) and the pure-black `DVBLACK` void texture. New setting
+    **Dark areas: Original / Lifted (default, floor 112) / Bright (144)** = `ThreeDRenderer.MinSectorLight`
+    (software + Remaster). `DVBLACK` itself stays black (asked the owner whether to replace it).
+- 2026-09-30: DEV5 open item 2 done: auto preset on a fresh install = Masterpiece only with ≥ 8 cores
+  **and** a strong GPU (`DeviceClass`: Adreno ≥ 640, Mali-G7x/G610+, Immortalis, Xclipse, desktop),
+  else Enhanced (≥ 6 cores) / Balanced.
+- 2026-09-30 more fixes (owner report "outline/ripples on my weapon", "black areas"):
+  - Light-blue (E1) / red (E3) outline around the weapon and HUD: bilinear "texel-centre" reads of
+    the frame texture blended neighbouring G-buffer codes into 252–254, which the effects treated as
+    sky (full fog/sun). All frame reads in `RekkrWorld` and `RemasterComposite` are now exact
+    `Texture2D.Load` fetches (shader target 3.5), and codes ≥ 249 are never shaded as world.
+  - Sun glare / sky fog on walls under a sky ceiling edge (e.g. E2M5 windows): a two-sided seg drew
+    its sky ceiling after setting the wall's G code, and `DrawSkyColumn` left `curG = 248` and
+    `curLight = 0` for the upper texture drawn next. It now restores both (software renderer,
+    every preset).
+  - Parity tool (scenario 7) rendered the old position after a warp (frame interpolation with a
+    frozen world); warps now disable interpolation for the frame.
+  - Tried and reverted: filling missing upper/lower textures with the sector's flat. Vanilla shows
+    whatever is behind such a gap (not a flat), and the gaps found were in closed monster closets
+    only, so Remaster keeps drawing nothing there.
+- 2026-09-30 sandbox toolchain: Android cmdline-tools must be 7.0 (Java 11; v12 needs Java 17);
+  NDK/build-tools symlinks extracted as text files break `clang` — see AGENTS.md dev6 section.

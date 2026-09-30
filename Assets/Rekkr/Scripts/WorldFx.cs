@@ -176,7 +176,7 @@ namespace ManagedDoom.UnityPort
             if (raysOn) Graphics.Blit(world, rays, mat, 1);
             if (RekkrSettings.DoF)
             {
-                Graphics.Blit(world, blurA, mat, 2);
+                Graphics.Blit(world, blurA, mat, 5);   // dev6: masked (no weapon/HUD halo)
                 Graphics.Blit(blurA, blurB, mat, 2);
             }
             mat.SetTexture("_RaysTex", raysOn ? (Texture)rays : Texture2D.blackTexture);

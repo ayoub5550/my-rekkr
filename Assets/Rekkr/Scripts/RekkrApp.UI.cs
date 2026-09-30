@@ -515,9 +515,9 @@ public sealed partial class RekkrApp
             if (!RekkrSettings.SmoothLighting) Hint(Loc.T("fx_needs_light"));
             if (CornerButton(next)) gfxPage = 3;
         }
-        else
+        else if (gfxPage == 3)
         {
-            // dev6: renderer (software original / Remaster GPU 3D) + its options, then dev5 world effects page 2
+            // dev6: renderer (software original / Remaster GPU 3D) + its options, dark areas
             if (Cycle(Loc.T("renderer"), Loc.T(RekkrSettings.Remaster ? "renderer_gpu" : "renderer_sw"))) RekkrSettings.Remaster = !RekkrSettings.Remaster;
             if (RekkrSettings.Remaster)
             {
@@ -525,6 +525,13 @@ public sealed partial class RekkrApp
                 var sh = Toggle(Loc.T("rm_shadows"), RekkrSettings.RemasterShadows);
                 if (sh != RekkrSettings.RemasterShadows) RekkrSettings.RemasterShadows = sh;
             }
+            // dev6: floor for very dark sectors (E3 has many light-0 rooms); works in both renderers
+            if (Cycle(Loc.T("dark_areas"), Loc.T("dark_areas_" + RekkrSettings.DarkAreas))) RekkrSettings.DarkAreas = (RekkrSettings.DarkAreas + 1) % 3;
+            if (CornerButton(next)) gfxPage = 4;
+        }
+        else
+        {
+            // dev5 world effects, page 2 of 2
             var a = Toggle(Loc.T("fx_ao"), RekkrSettings.AO);
             if (a != RekkrSettings.AO) { RekkrSettings.AO = a; MarkCustom(); }
             var b = Toggle(Loc.T("fx_particles"), RekkrSettings.Particles);

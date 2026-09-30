@@ -368,6 +368,12 @@ namespace ManagedDoom.Video
         // continuous, in 1/256 colormap-level units. The true-colour writer blends the two colormap
         // rows around the level, so the original 32 bands become smooth gradients while every pixel
         // keeps REKKR's own COLORMAP tones.
+        /// <summary>my-rekkr dev6: "dark areas" floor for sector light (0 = original). REKKR's E3 has many
+        /// light-0 sectors that draw pitch black on a phone screen; the floor lifts them without touching
+        /// brighter sectors. Light effects (flicker/glow) still work above the floor.</summary>
+        public static int MinSectorLight;
+        private static int Lit(int level) => level < MinSectorLight ? MinSectorLight : level;
+
         public static bool TrueColor;
 
         /// <summary>my-rekkr dev6: skip the software 3D world (walls, flats, sprites); the Remaster GPU
@@ -1505,7 +1511,7 @@ namespace ManagedDoom.Video
 
             var rwCenterAngle = Angle.Ang90 + viewAngle - rwNormalAngle;
 
-            var wallLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
+            var wallLightLevel = (Lit(frontSector.LightLevel) >> lightSegShift) + extraLight;
             if (seg.Vertex1.Y == seg.Vertex2.Y)
             {
                 wallLightLevel--;
@@ -1536,7 +1542,7 @@ namespace ManagedDoom.Video
             // Determine which color map is used for the plane according to the light level.
             //
 
-            var planeLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
+            var planeLightLevel = (Lit(frontSector.LightLevel) >> lightSegShift) + extraLight;
             var planeLights = zLight[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
             curPlaneLevels = zLevel[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
 
@@ -1821,7 +1827,7 @@ namespace ManagedDoom.Video
 
                 rwCenterAngle = Angle.Ang90 + viewAngle - rwNormalAngle;
 
-                var wallLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
+                var wallLightLevel = (Lit(frontSector.LightLevel) >> lightSegShift) + extraLight;
                 if (seg.Vertex1.Y == seg.Vertex2.Y)
                 {
                     wallLightLevel--;
@@ -1889,7 +1895,7 @@ namespace ManagedDoom.Video
             // Determine which color map is used for the plane according to the light level.
             //
 
-            var planeLightLevel = (frontSector.LightLevel >> lightSegShift) + extraLight;
+            var planeLightLevel = (Lit(frontSector.LightLevel) >> lightSegShift) + extraLight;
             var planeLights = zLight[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
             curPlaneLevels = zLevel[Math.Clamp(planeLightLevel, 0, lightLevelCount - 1)];
 
@@ -2140,7 +2146,7 @@ namespace ManagedDoom.Video
         {
             var seg = drawSeg.Seg;
 
-            var wallLightLevel = (seg.FrontSector.LightLevel >> lightSegShift) + extraLight;
+            var wallLightLevel = (Lit(seg.FrontSector.LightLevel) >> lightSegShift) + extraLight;
             if (seg.Vertex1.Y == seg.Vertex2.Y)
             {
                 wallLightLevel--;
@@ -2604,14 +2610,17 @@ namespace ManagedDoom.Video
             var angle = (int)((viewAngle + xToAngle[x]).Data + SkyDriftBam >> angleToSkyShift);
             var mask = world.Map.SkyTexture.Width - 1;
             var source = world.Map.SkyTexture.Composite.Columns[angle & mask];
+            // dev6 fix: restore the wall's light/G code afterwards. A two-sided seg draws its sky ceiling
+            // between setting curG and drawing its upper texture, so the wall used to inherit 248 (sky)
+            // and got the sun glare / sky fog of the G-buffer effects.
+            var saveLight = curLight; var saveG = curG;
             curLight = 0;
             curG = GBuffer.Sky;
             if (curShear == 0 && !FreeLookSky)
-            {
                 DrawColumn(source[0], colorMap[0], x, y1, y2, skyInvScale, skyTextureAlt);
-                return;
-            }
-            DrawSkyColumnClamped(source[0], x, y1, y2);
+            else
+                DrawSkyColumnClamped(source[0], x, y1, y2);
+            curLight = saveLight; curG = saveG;
         }
 
         /// <summary>my-rekkr dev4: sky column under free look. Rows above/below the sky texture repeat its
@@ -2742,7 +2751,7 @@ namespace ManagedDoom.Video
             // Well, now it will be done.
             sectorValid[sector.Number] = validCount;
 
-            var spriteLightLevel = (sector.LightLevel >> lightSegShift) + extraLight;
+            var spriteLightLevel = (Lit(sector.LightLevel) >> lightSegShift) + extraLight;
             var spriteLights = scaleLight[Math.Clamp(spriteLightLevel, 0, lightLevelCount - 1)];
             curSpriteLevels = scaleLevel[Math.Clamp(spriteLightLevel, 0, lightLevelCount - 1)];
 
@@ -3209,7 +3218,7 @@ namespace ManagedDoom.Video
         private void DrawPlayerSprites(Player player)
         {
             // Get light level.
-            var spriteLightLevel = (player.Mobj.Subsector.Sector.LightLevel >> lightSegShift) + extraLight;
+            var spriteLightLevel = (Lit(player.Mobj.Subsector.Sector.LightLevel) >> lightSegShift) + extraLight;
 
             byte[][] spriteLights;
             if (spriteLightLevel < 0)

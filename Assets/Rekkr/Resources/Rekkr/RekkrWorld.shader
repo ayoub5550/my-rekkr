@@ -17,9 +17,13 @@ Shader "Rekkr/World"
     }
     CGINCLUDE
     #include "UnityCG.cginc"
-    #pragma target 3.0
-    sampler2D _MainTex; float4 _MainTex_TexelSize;
-    sampler2D _GTex;
+    #pragma target 3.5
+    // dev6 bug fix: the frame and its G-buffer are read with exact texel loads, never through the
+    // texture's bilinear sampler — "centre" samples of the bilinear frame came back blended with the
+    // neighbours on some GPUs, so weapon/HUD edges got in-between codes (252..254 = "far sky") and the
+    // world pass painted fog/sun on them: the bright or red outline around the weapon and the HUD.
+    Texture2D _MainTex; SamplerState sampler_MainTex; float4 _MainTex_TexelSize;
+    Texture2D _GTex;
     sampler2D _RaysTex;
     sampler2D _BlurTex;
     float4 _Frame;      // W (columns), H (rows), 1/W, 1/H
@@ -42,10 +46,10 @@ Shader "Rekkr/World"
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
     v2f vert(appdata_img v) { v2f o; o.pos = UnityObjectToClipPos(v.vertex); o.uv = v.texcoord; return o; }
 
-    float4 Fetch(float x, float y)
-    {
-        return tex2Dlod(_MainTex, float4((y + 0.5) * _Frame.w, (x + 0.5) * _Frame.z, 0, 0));
-    }
+    // Frame pixel (x = column, y = row); the texture is transposed (texel x = row, texel y = column).
+    int3 TexelOf(float x, float y) { return int3(clamp((int)floor(y), 0, (int)_Frame.y - 1), clamp((int)floor(x), 0, (int)_Frame.x - 1), 0); }
+    float4 Fetch(float x, float y) { return _MainTex.Load(TexelOf(x, y)); }
+    float4 FetchG(float x, float y) { return _GTex.Load(TexelOf(x, y)); }
     int CodeOf(float a) { return (int)(a * 255.0 + 0.5); }
     float ZOf(int c)
     {
@@ -191,7 +195,7 @@ Shader "Rekkr/World"
                 float4 src = Fetch(x, y);
                 int code = CodeOf(src.a);
                 float3 c = src.rgb;
-                if (code == 255 || code == 249) return src;   // 2D / weapon untouched
+                if (code >= 249) return src;   // 2D / weapon (and any non-world code) untouched
                 if (_Fx2.w > 0.5) // debug: G-buffer false colour
                 {
                     if (code < 200) return float4((1 - code / 200.0).xxx, src.a);
@@ -266,7 +270,11 @@ Shader "Rekkr/World"
                     float grazing = saturate(1.0 - dist / (_Win.w * 0.55));
                     float F = lerp(0.28, 0.78, grazing * grazing) * lerp(1.0, 0.35, murky) * reflOk;
                     float3 tint = lerp(float3(1, 1, 1), c / max(max(c.r, max(c.g, c.b)), 0.05), 0.45);
-                    float3 body = Fetch(x + n.x * 0.8, y + n.y * 0.5).rgb;
+                    // dev6 bug fix: the ripple-displaced body sample must be liquid too — near the weapon or the
+                    // HUD it used to pick their pixels, drawing wavy weapon-coloured fringes ("ripples on the weapon").
+                    float4 bs = Fetch(x + n.x * 0.8, y + n.y * 0.5);
+                    int bc = CodeOf(bs.a);
+                    float3 body = (bc >= 200 && bc < 236) ? bs.rgb : c;
                     c = lerp(body * 0.85, refl * tint, F);
                     // sparkles + sun specular
                     float sn = VNoise(P * 0.35 + t * 1.3) * VNoise(P * 0.31 - t * 1.1 + 4.0);
@@ -300,7 +308,9 @@ Shader "Rekkr/World"
                         float att = saturate(1.0 - dot(dv, dv) / (r * r));
                         add += _LightCol[L].rgb * att * att;
                     }
-                    c += c * add * 2.2 + add * 0.05;
+                    // dev6: capped (a muzzle flash right in front of a wall blew the whole view out to white)
+                    add = min(add, 0.5);
+                    c += c * add * 1.8 + add * 0.05;
                 }
 
                 // ---- ambient occlusion (solid pixels)
@@ -371,8 +381,8 @@ Shader "Rekkr/World"
             float4 frag(v2f i) : SV_Target
             {
                 float2 d = _MainTex_TexelSize.xy;
-                return (tex2D(_MainTex, i.uv + float2(-d.x, -d.y)) + tex2D(_MainTex, i.uv + float2(d.x, -d.y))
-                      + tex2D(_MainTex, i.uv + float2(-d.x, d.y)) + tex2D(_MainTex, i.uv + float2(d.x, d.y))) * 0.25;
+                return (_MainTex.Sample(sampler_MainTex, i.uv + float2(-d.x, -d.y)) + _MainTex.Sample(sampler_MainTex, i.uv + float2(d.x, -d.y))
+                      + _MainTex.Sample(sampler_MainTex, i.uv + float2(-d.x, d.y)) + _MainTex.Sample(sampler_MainTex, i.uv + float2(d.x, d.y))) * 0.25;
             }
             ENDCG
         }
@@ -385,15 +395,18 @@ Shader "Rekkr/World"
             {
                 float x = floor(i.uv.y * _Frame.x), y = floor(i.uv.x * _Frame.y);
                 float4 w = Fetch(x, y);
-                int code = CodeOf(tex2Dlod(_GTex, float4((y + 0.5) * _Frame.w, (x + 0.5) * _Frame.z, 0, 0)).a);
+                int code = CodeOf(FetchG(x, y).a);
                 float3 c = w.rgb;
-                if (code != 255 && code != 249)
+                if (code < 249)
                 {
                     if (_Fx2.y > 0 && code <= 248)
                     {
                         float z = ZOf(code);
                         float k = saturate((z - _Fx2.z) / (_Fx2.z * 2.0));
-                        c = lerp(c, tex2D(_BlurTex, i.uv).rgb, k * 0.85);
+                        // dev6 bug fix: the blur is premultiplied by a "world pixel" mask (pass 5), so the weapon
+                        // and the HUD no longer bleed into the far background as a bright/red halo around them.
+                        float4 b = tex2D(_BlurTex, i.uv);
+                        if (b.a > 0.02) c = lerp(c, b.rgb / b.a, k * 0.85);
                     }
                     c += tex2D(_RaysTex, i.uv).rgb;
                 }
@@ -418,12 +431,33 @@ Shader "Rekkr/World"
             float4 pfrag(pv2f i) : SV_Target
             {
                 float2 suv = i.sp.xy / i.sp.w;
-                int code = CodeOf(tex2D(_GTex, suv).a);
-                if (code == 255 || code == 249) discard;
+                int code = CodeOf(FetchG(suv.y * _Frame.x, suv.x * _Frame.y).a);
+                if (code >= 249) discard;
                 if (code < 248 && ZOf(code) < i.uv.x) discard;   // behind geometry
                 float2 q = i.uv.yz * 2.0 - 1.0;
                 float m = saturate(1.0 - dot(q, q));
                 return float4(i.col.rgb * i.col.a * m, 0);
+            }
+            ENDCG
+        }
+        Pass // 5 masked downsample (DoF source): premultiplied by "is a world pixel" (not weapon/HUD)
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 d = _MainTex_TexelSize.xy * 0.5;
+                float4 acc = 0;
+                [unroll] for (int k = 0; k < 4; k++)
+                {
+                    float2 o = float2((k & 1) ? d.x : -d.x, (k & 2) ? d.y : -d.y);
+                    float4 s = _MainTex.SampleLevel(sampler_MainTex, i.uv + o, 0);
+                    int cc = CodeOf(s.a);
+                    float w = (cc == 249 || cc >= 250) ? 0.0 : 1.0;
+                    acc += float4(s.rgb * w, w);
+                }
+                return acc * 0.25;
             }
             ENDCG
         }

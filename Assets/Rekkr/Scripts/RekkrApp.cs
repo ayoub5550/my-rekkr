@@ -135,6 +135,8 @@ public sealed partial class RekkrApp : MonoBehaviour
         if (!string.IsNullOrEmpty(envRen)) RekkrSettings.Remaster = envRen == "remaster";
         var envLight = Environment.GetEnvironmentVariable("REKKR_TRUECOLOR");
         if (!string.IsNullOrEmpty(envLight)) RekkrSettings.SmoothLighting = envLight == "1";
+        var envDark = Environment.GetEnvironmentVariable("REKKR_DARK");   // dev6 tests: dark-areas level 0..2
+        if (!string.IsNullOrEmpty(envDark)) RekkrSettings.DarkAreas = Mathf.Clamp(int.Parse(envDark), 0, 2);
     }
 
     private IEnumerator Start()
@@ -186,7 +188,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             Doom = new Doom(args, config, content, video, sound, music, input);
             status = null;
             RefreshContinue();
-            Debug.Log($"[REKKR] started {Version} mode={content.Wad.GameMode} frame={video.FrameWidth}x{video.FrameHeight} threads={video.RenderThreads} cores={SystemInfo.processorCount} testLoop={testLoop} lang={(Loc.Arabic ? "ar" : "en")}");
+            Debug.Log($"[REKKR] started {Version} mode={content.Wad.GameMode} frame={video.FrameWidth}x{video.FrameHeight} threads={video.RenderThreads} cores={SystemInfo.processorCount} gpuClass={(ManagedDoom.UnityPort.DeviceClass.StrongGpu ? "strong" : "weak")} testLoop={testLoop} lang={(Loc.Arabic ? "ar" : "en")}");
         }
         catch (Exception e)
         {
@@ -291,6 +293,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             video.LocalViewTurn = SmoothLookActive() ? input.PendingTurn : (Angle?)null;
             // dev4 free look: the view uses this frame's pitch; the sim gets it with the next tic.
             ThreeDRenderer.FreeLookSky = RekkrSettings.FreeLook;
+            ThreeDRenderer.MinSectorLight = RekkrSettings.DarkAreaFloor[RekkrSettings.DarkAreas];   // dev6 "dark areas"
             video.LocalViewPitch = RekkrSettings.FreeLook && InLevel ? input.PitchInt : 0;
             // dev6 Remaster: the GPU draws the 3D world of the level on screen (game, demo, title demo);
             // the software renderer still draws the 2D (HUD, menus, weapon) and wipes.
@@ -302,7 +305,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             video.Override = null;
             if (levelGame != null)
             {
-                gpu ??= new GpuRenderer(content);
+                if (gpu == null) { GpuRenderer.VoxelDir = Path.Combine(Application.persistentDataPath, "voxels"); gpu = new GpuRenderer(content); }
                 video.Override = gpu.Render(video, levelGame, Fixed.FromFloat(Mathf.Clamp01(frac)));
             }
             postThisFrame = PostFx.Active;

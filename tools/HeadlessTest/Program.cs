@@ -16,6 +16,7 @@ public static class Program
 {
     public static int Main(string[] argv)
     {
+        ManagedDoom.Video.ThreeDRenderer.MinSectorLight = int.TryParse(Environment.GetEnvironmentVariable("MIN_LIGHT"), out var ml) ? ml : 0;   // dev6 dark-areas floor
         var wad = Path.GetFullPath(argv[0]);
         var outDir = argv.Length > 1 ? argv[1] : "out";
         Directory.CreateDirectory(outDir);
@@ -43,6 +44,12 @@ public static class Program
             return Bench.Run(new GameContent(bargs), bargs, argv.Length > 3 ? argv[3] : "1066");
         }
         var goldenPath = argv.Length > 3 ? argv[3] : Path.Combine(AppContext.BaseDirectory, "../../../golden.txt");
+        if (mode == "ray")
+        {
+            var ra = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            Ray.Run(new GameContent(ra), int.Parse(argv[3]), int.Parse(argv[4]), double.Parse(argv[5]), double.Parse(argv[6]), double.Parse(argv[7]), argv.Length > 8 ? int.Parse(argv[8]) : 6);
+            return 0;
+        }
         if (mode == "secinfo")
         {
             var sa = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
@@ -69,6 +76,17 @@ public static class Program
         {
             var sargs = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
             return ShotAt.Run(new GameContent(sargs), sargs, argv, outDir);
+        }
+        if (mode == "dark")
+        {
+            var ka = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            var eps = (argv.Length > 3 ? argv[3] : "1,2,3,4").Split(',').Select(int.Parse).ToArray();
+            return DarkScan.Run(new GameContent(ka), ka, eps, outDir);
+        }
+        if (mode == "texdump")
+        {
+            var ta = new CommandLineArgs(new[] { "-iwad", wad, "-file", Path.Combine(Path.GetDirectoryName(wad), "rekkr-compat.wad") });
+            return TexDump.Run(new GameContent(ta), argv[3], outDir);
         }
         if (mode == "hom")
         {

@@ -1,6 +1,6 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-29 (v0.5.0, dev5).
+Last updated: 2026-09-30 (v0.6.0, dev6).
 
 > **dev5 (v0.5.0) was released 2026-09-29 from branch `feat/dev5`** (GitHub release v0.5.0): the G-buffer in the frame
 > alpha feeds GPU effects: living sky and sun rays, reflective water, hot liquids, fog, weather and lightning, dynamic
@@ -62,6 +62,12 @@ v0.1.0 checkpoint:
   AO, DoF), Voxile filmic grade, Masterpiece preset (3; Custom = 4), weapon wheel, automap touch. APK 100,040,073 B, versionCode 5.
   Test Lab r8q/33 S1+S2+S5 Passed, 0 `E Unity`; Masterpiece E1–E4 100.2–108.9 fps. Weak device not tested (quota). Details: `docs/DEV5.md`.
 
+- v0.6.0 (dev6), branch `feat/dev6`: optional GPU 3D renderer "Remaster" (level mesh, billboards / extruded sprites,
+  KVX loader, sun shadow map, dev5 effects on the GPU G-buffer), setting **Dark areas** (Original / Lifted / Bright),
+  GPU-class auto preset (`DeviceClass`), fixes for the weapon/HUD outline, water ripples on the weapon, light blow-out,
+  DoF halo and sun glare on walls. **New keystore** (cert SHA-256 `768de491…bab8`): uninstall ≤ 0.5.0 once.
+  Details and honest stage status: `docs/DEV6.md` §6/§9.
+
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
 
@@ -88,7 +94,7 @@ v0.1.0 checkpoint:
 REKKR_KEYSTORE=/path/rekkr.keystore REKKR_KEYSTORE_PASS=... REKKR_VERSION_CODE=1 \
   tools/sandbox/build_android.sh          # ~3–4 min incremental, Builds/REKKR-0.1.0.apk
 ```
-- Signing keystore: alias `rekkr`, certificate SHA-256 `58c71163…248a9d0`. Keep the same keystore
+- Signing keystore: alias `rekkr`, certificate SHA-256 `768de491…bab8` since v0.6.0 (≤ 0.5.0: `58c71163…248a9d0`, lost). Keep the same keystore
   for every release, otherwise updates will not install over the old app.
 - The keystore and password are **never** committed. `RekkrBuild` reads them from the environment.
 - Bump `RekkrApp.Version`, `RekkrBuild` versionName and `REKKR_VERSION_CODE` for each release.
@@ -141,6 +147,17 @@ The same setup is used for my-librequake (its §9).
     LD_LIBRARY_PATH=<unity libs> LD_PRELOAD=libschedfix.so xvfb-run -a -s "-screen 0 2400x1080x24"
     Builds/linux/rekkr.x86_64 -force-glcore -screen-width 2400 -screen-height 1080 -screen-fullscreen 0`.
   - llvmpipe runs at about 58 fps. That is useful for UI QA, not for performance numbers.
+
+- **dev6 toolchain traps (fresh sandbox):**
+  - Android cmdline-tools must be **7.0** (`commandlinetools-linux-8512546`); v12 needs Java 17 (class 61)
+    and Unity's Gradle step runs on JDK 11.
+  - NDK / build-tools / platform-tools symlinks can be extracted as small text files ("clang: not found").
+    Re-create every file whose content is just a relative path as a real symlink.
+  - Unity 2022 desktop player: `-logFile` is relative to the player's cwd — pass absolute paths.
+- **dev6 test scenarios:** `6` (Remaster tour E1M1–E4M1 + software vs Remaster fps), `7` (parity: warp + freeze,
+  software vs Remaster shot of the same view; `REKKR_PARITY="e,m,x,y,angle,pitch;…"`, `REKKR_SHOT_ALPHA=1` also
+  dumps the G-buffer alpha). Frame textures must be read with exact texel loads, never bilinear
+  (bilinear mixes G-buffer codes → outlines).
 
 ## 6. Traps and decisions
 

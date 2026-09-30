@@ -3,7 +3,7 @@
 // like the dev3 smooth lighting), fake contrast on axis-aligned walls, extra light (gun flash), fixed
 // colormaps (invulnerability / light amp), current damage/bonus palette. Alpha = dev5 G-buffer code.
 // Passes: 0 opaque walls+flats, 1 masked (mid textures, things; alpha test), 2 sky, 3 sun shadow caster,
-// 4 spectre fuzz.
+// 4 extruded things (double-sided), 5 spectre fuzz.
 // Vertex layout: see Engine/Remaster/RVertex.cs.
 Shader "Rekkr/Remaster/RemasterWorld"
 {
@@ -27,6 +27,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
     float4 _RTSize;   // w, h, 1/w, 1/h
     float4 _Sky;      // sky texture slot, row step per pixel, drift (rad), stretched (0/1)
     float4 _Light;    // extra light, fixed colormap, smooth (0/1), time
+    float4 _Inst;     // extruded thing instance: sector, full bright (0/1), unused, unused
     sampler2D _ShadowMap;
     float4x4 _ShadowVP;   // world -> shadow clip (xy in -1..1, z = light depth in map units in w-less ortho)
     float4 _SunDir;       // unity world dir towards the sun, on (0/1)
@@ -62,24 +63,30 @@ Shader "Rekkr/Remaster/RemasterWorld"
     {
         v2f o;
         o.pos = UnityObjectToClipPos(v.vertex);
+        float3 wp = mul(unity_ObjectToWorld, v.vertex).xyz;
         o.uv = v.uv0.xy;
         float slot = v.uv0.z;
-        o.rect = slot >= 0 ? Slot(slot) : float4(0, 0, 1, 1);
-        float2 d = v.vertex.xz - _View.xy;
+        o.rect = slot >= 0 ? Slot(slot) : float4(slot, 0, 1, 1);   // slot -3: voxel, palette index in u
+        float2 d = wp.xz - _View.xy;
         o.fz = d.x * cos(_View.w) + d.y * sin(_View.w);
         float kind = v.uv1.z;
         float lightnum = 0; float outdoor = 0;
-        if (v.uv0.w >= 0)
+        float sector = v.uv0.w; float flags = v.uv1.w;
+        bool extruded = kind > 3.5 && sector < -0.5;
+        if (extruded) { sector = _Inst.x; flags = _Inst.y; }
+        if (sector >= 0)
         {
-            float2 si = SectorInfo(v.uv0.w);
+            float2 si = SectorInfo(sector);
             lightnum = floor(si.x / 16.0) + _Light.x;
             outdoor = si.y;
             if (kind < 0.5) lightnum += v.uv1.w;          // wall fake contrast
         }
-        o.info = float4(kind, lightnum, v.uv1.w, outdoor);
+        o.info = float4(kind, lightnum, flags, outdoor);
         o.sp = ComputeScreenPos(o.pos);
-        o.wpos = v.vertex.xyz;
-        o.n = kind < 0.5 ? float3(v.uv1.x, 0, v.uv1.y) : kind < 1.5 ? float3(0, 1, 0) : kind < 2.5 ? float3(0, -1, 0) : float3(v.uv1.x, 0.3, v.uv1.y);
+        o.wpos = wp;
+        float3 n = kind < 0.5 ? float3(v.uv1.x, 0, v.uv1.y) : kind < 1.5 ? float3(0, 1, 0) : kind < 2.5 ? float3(0, -1, 0) : float3(v.uv1.x, 0.3, v.uv1.y);
+        if (extruded) n = mul((float3x3)unity_ObjectToWorld, float3(v.uv1.x, v.uv1.w, v.uv1.y));
+        o.n = n;
         return o;
     }
 
@@ -131,7 +138,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
         float2 uv = sc.xy * 0.5 + 0.5;
         if (uv.x <= 0 || uv.y <= 0 || uv.x >= 1 || uv.y >= 1) return 1;
         float ndl = dot(normalize(n), _SunDir.xyz);
-        float facing = kind > 3.5 ? 0.6 : saturate(ndl);
+        float facing = saturate(ndl);
         float bias = _ShadowParams.y * (1.5 + 2.0 * (1.0 - saturate(abs(ndl))));
         float d = sc.z - bias;
         float lit = 0;
@@ -141,7 +148,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
         lit += step(d, tex2Dlod(_ShadowMap, float4(uv + float2(-0.5, 0.5) * o, 0, 0)).r);
         lit += step(d, tex2Dlod(_ShadowMap, float4(uv + float2(0.5, 0.5) * o, 0, 0)).r);
         lit *= 0.25;
-        if (ndl <= 0 && kind < 3.5) lit = 0;          // facing away from the sun = self-shadowed
+        if (ndl <= 0) lit = 0;                         // facing away from the sun = self-shadowed
         float3 shadowed = (1.0 - _SunTint.w).xxx;
         float3 sunny = 1.0 + _SunTint.rgb * 0.35 * facing;
         return lerp(shadowed, sunny, lit);
@@ -149,7 +156,7 @@ Shader "Rekkr/Remaster/RemasterWorld"
 
     float4 Shade(v2f i, bool masked)
     {
-        float2 t = AtlasTexel(i.uv, i.rect);
+        float2 t = i.rect.x < -2.5 ? float2(i.uv.x / 255.0, 1) : AtlasTexel(i.uv, i.rect);
         if (masked) clip(t.g - 0.5);
         float kind = i.info.x;
         bool flat = kind > 0.5 && kind < 2.5;
@@ -218,21 +225,30 @@ Shader "Rekkr/Remaster/RemasterWorld"
             {
                 sv2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
-                float4 sc = mul(_ShadowVP, float4(v.vertex.xyz, 1));
+                float4 sc = mul(_ShadowVP, float4(mul(unity_ObjectToWorld, v.vertex).xyz, 1));
                 o.depth = sc.z;
                 o.uv = v.uv0.xy;
-                o.rect = v.uv0.z >= 0 ? Slot(v.uv0.z) : float4(0, 0, 1, 1);
+                o.rect = v.uv0.z >= 0 ? Slot(v.uv0.z) : float4(v.uv0.z, 0, 1, 1);
                 o.masked = _SunCasterMask.x;
                 return o;
             }
             float4 fshadow(sv2f i) : SV_Target
             {
-                if (i.masked > 0.5) { float2 t = AtlasTexel(i.uv, i.rect); clip(t.g - 0.5); }
+                if (i.masked > 0.5 && i.rect.x > -2.5) { float2 t = AtlasTexel(i.uv, i.rect); clip(t.g - 0.5); }
                 return float4(i.depth, 0, 0, 1);
             }
             ENDCG
         }
-        Pass // 4 spectre fuzz: darken what is behind with a flickering column pattern (keeps alpha)
+        Pass // 4 extruded things (double-sided, alpha test)
+        {
+            Cull Off ZWrite On ZTest LEqual
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            float4 frag(v2f i) : SV_Target { return Shade(i, true); }
+            ENDCG
+        }
+        Pass // 5 spectre fuzz: darken what is behind with a flickering column pattern (keeps alpha)
         {
             Cull Off ZWrite Off ZTest LEqual
             Blend DstColor Zero

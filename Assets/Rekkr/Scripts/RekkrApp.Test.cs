@@ -77,7 +77,9 @@ public sealed partial class RekkrApp
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("05b_settings_graphics"); yield return null;
         gfxPage = 1; yield return Wait(1.4F); Shot("05c_settings_effects"); yield return null;
         gfxPage = 2; yield return Wait(1.4F); Shot("05d_settings_world"); yield return null;
-        gfxPage = 3; yield return Wait(1.4F); Shot("05e_settings_world2"); yield return null;
+        gfxPage = 3; RekkrSettings.Remaster = true; yield return Wait(1.4F); Shot("05e_settings_renderer"); yield return null;
+        RekkrSettings.Remaster = false;
+        gfxPage = 4; yield return Wait(1.4F); Shot("05f_settings_world2"); yield return null;
         gfxPage = 0;
         settingsTab = 0; yield return Wait(0.6F);
         OpenEditor(); yield return Wait(1.4F); Shot("06_editor"); yield return null;
@@ -154,6 +156,9 @@ public sealed partial class RekkrApp
         settingsTab = 3; gfxPage = 0; yield return Wait(1.4F); Shot("04b_settings_ar_graphics"); yield return null;
         gfxPage = 1; yield return Wait(1.4F); Shot("04c_settings_ar_effects"); yield return null;
         gfxPage = 2; yield return Wait(1.4F); Shot("04d_settings_ar_world"); yield return null;
+        gfxPage = 3; RekkrSettings.Remaster = true; yield return Wait(1.4F); Shot("04e_settings_ar_renderer"); yield return null;
+        RekkrSettings.Remaster = false;
+        gfxPage = 4; yield return Wait(1.4F); Shot("04f_settings_ar_world2"); yield return null;
         gfxPage = 0;
         settingsTab = 0; settingsOpen = false;
         yield return TapSeq(Ctl.Back, 0.8F);

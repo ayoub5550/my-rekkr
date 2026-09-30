@@ -167,6 +167,8 @@ namespace ManagedDoom.UnityPort
             UpdateLitPal(player);
 
             var viewer = player.Mobj;
+            curFrac = frac;
+            BeginExtruded(v);
             thingBuilder.Build(world, frac, v.X, v.Y, v.Angle, viewer);
             things ??= NewDynamicMesh("RemasterThings");
             UploadThings();
@@ -207,7 +209,8 @@ namespace ManagedDoom.UnityPort
             cmd.DrawMesh(level, Matrix4x4.identity, worldMat, 2, 2); calls++;   // sky
             cmd.DrawMesh(level, Matrix4x4.identity, worldMat, 1, 1); calls++;   // masked mid textures
             if (thingBuilder.FuzzIndexStart > 0) { cmd.DrawMesh(things, Matrix4x4.identity, worldMat, 0, 1); calls++; }
-            if (thingBuilder.IndexCount > thingBuilder.FuzzIndexStart) { cmd.DrawMesh(things, Matrix4x4.identity, worldMat, 1, 4); calls++; }
+            calls += DrawExtruded(4, null);
+            if (thingBuilder.IndexCount > thingBuilder.FuzzIndexStart) { cmd.DrawMesh(things, Matrix4x4.identity, worldMat, 1, 5); calls++; }
             Graphics.ExecuteCommandBuffer(cmd);
             DrawCalls = calls;
 
@@ -274,7 +277,184 @@ namespace ManagedDoom.UnityPort
             cmd.DrawMesh(level, Matrix4x4.identity, worldMat, 0, 3, opaqueCaster);
             cmd.DrawMesh(level, Matrix4x4.identity, worldMat, 1, 3, maskedCaster);
             if (thingBuilder.FuzzIndexStart > 0) cmd.DrawMesh(things, Matrix4x4.identity, worldMat, 0, 3, maskedCaster);
-            calls0 = 3;
+            calls0 = 3 + DrawExtruded(3, maskedCaster);
+        }
+
+        // ---------------------------------------------------------------- stage 6: extruded sprites
+        private sealed class Extruded
+        {
+            public System.Threading.Tasks.Task<ExtrudedMesh> Task;
+            public Mesh Mesh; public int Bytes; public int LastUse;
+        }
+        private readonly System.Collections.Generic.Dictionary<(Patch, bool, int), Extruded> extruded = new System.Collections.Generic.Dictionary<(Patch, bool, int), Extruded>();
+        private readonly System.Collections.Generic.List<(Mesh mesh, Matrix4x4 m, float sector, float bright)> instances = new System.Collections.Generic.List<(Mesh, Matrix4x4, float, float)>();
+        private readonly MaterialPropertyBlock instBlock = new MaterialPropertyBlock();
+        private int frameNo, pendingBuilds;
+        private long cacheBytes;
+        public const long CacheBudget = 64L << 20;   // 64 MB (DEV6 §5)
+        public float CacheMB => cacheBytes / 1048576F;
+        public int ExtrudedCount => instances.Count;
+        private float instCa, instSa;
+        private Fixed curFrac;
+
+        private void BeginExtruded(ThreeDRenderer.ViewInfo v)
+        {
+            frameNo++;
+            instances.Clear();
+            instCa = Mathf.Cos(v.Angle); instSa = Mathf.Sin(v.Angle);
+            RefreshVoxels();
+            thingBuilder.Replace = RekkrSettings.RemasterThings == 1 || voxelMap.Entries.Count > 0 ? ReplaceThing : (Func<Mobj, Patch, bool, float, float, float, bool>)null;
+            // finished worker builds -> meshes (main thread), at most 24 per frame
+            var made = 0;
+            foreach (var e in extruded.Values)
+            {
+                if (e.Mesh != null || e.Task == null || !e.Task.IsCompleted || made >= 24) continue;
+                made++;
+                var r = e.Task.IsFaulted ? null : e.Task.Result;
+                e.Task = null; pendingBuilds--;
+                if (r == null || r.Indices.Length == 0) { e.Bytes = 0; continue; }
+                var m = new Mesh { name = "RemasterExtruded" };
+                m.SetVertexBufferParams(r.Vertices.Length, Layout);
+                m.SetVertexBufferData(r.Vertices, 0, 0, r.Vertices.Length);
+                m.SetIndexBufferParams(r.Indices.Length, IndexFormat.UInt32);
+                m.SetIndexBufferData(r.Indices, 0, 0, r.Indices.Length);
+                m.subMeshCount = 1;
+                m.SetSubMesh(0, new SubMeshDescriptor(0, r.Indices.Length));
+                m.RecalculateBounds();
+                e.Mesh = m; e.Bytes = r.Bytes; cacheBytes += e.Bytes;
+            }
+            if (cacheBytes > CacheBudget) EvictLru();
+        }
+
+        private void EvictLru()
+        {
+            var list = new System.Collections.Generic.List<((Patch, bool, int) k, Extruded e)>();
+            foreach (var kv in extruded) if (kv.Value.Mesh != null) list.Add((kv.Key, kv.Value));
+            list.Sort((a, b) => a.e.LastUse.CompareTo(b.e.LastUse));
+            foreach (var (k, e) in list)
+            {
+                if (cacheBytes <= CacheBudget * 3 / 4 || e.LastUse >= frameNo - 1) break;
+                cacheBytes -= e.Bytes; UnityEngine.Object.Destroy(e.Mesh); extruded.Remove(k);
+            }
+        }
+
+        private static int DepthClass(Mobj mo)
+        {
+            if ((mo.Flags & MobjFlags.CountKill) != 0) return 10;      // monsters: full volume
+            if ((mo.Flags & MobjFlags.Missile) != 0) return 6;
+            if ((mo.Flags & MobjFlags.Special) != 0) return 5;         // pickups: flatter
+            return 8;                                                   // decorations, corpses
+        }
+
+        // ---------------------------------------------------------------- stage 7: KVX voxel packs
+        public static string VoxelDir;                  // persistentDataPath/voxels (set by the app)
+        private VoxelMap voxelMap = new VoxelMap();
+        private readonly System.Collections.Generic.Dictionary<string, Mesh> voxelMeshes = new System.Collections.Generic.Dictionary<string, Mesh>();
+        private DateTime voxelStamp = DateTime.MinValue;
+        private float voxelCheck = -10;
+        public int VoxelModels => voxelMeshes.Count;
+        public int VoxelMappings => voxelMap.Entries.Count;
+        private static readonly string[] spriteNames = Enum.GetNames(typeof(Sprite));
+
+        private void RefreshVoxels()
+        {
+            if (string.IsNullOrEmpty(VoxelDir) || Time.realtimeSinceStartup - voxelCheck < 2F) return;
+            voxelCheck = Time.realtimeSinceStartup;
+            var txt = System.IO.Path.Combine(VoxelDir, "voxels.txt");
+            var stamp = System.IO.File.Exists(txt) ? System.IO.File.GetLastWriteTimeUtc(txt) : DateTime.MinValue;
+            if (stamp == voxelStamp) return;
+            voxelStamp = stamp;
+            foreach (var m in voxelMeshes.Values) if (m != null) UnityEngine.Object.Destroy(m);
+            voxelMeshes.Clear();
+            voxelMap = stamp == DateTime.MinValue ? new VoxelMap() : VoxelMap.Parse(System.IO.File.ReadAllText(txt));
+            var pal = content.Wad.ReadLump("PLAYPAL");
+            foreach (var kv in voxelMap.Entries)
+            {
+                try
+                {
+                    var file = System.IO.Path.Combine(VoxelDir, kv.Value.File);
+                    if (!voxelMeshes.ContainsKey(kv.Value.File))
+                    {
+                        var model = KvxModel.Load(System.IO.File.ReadAllBytes(file), pal);
+                        var em = model.Mesh(1F);
+                        voxelMeshes[kv.Value.File] = ToMesh(em, "RemasterVoxel");
+                        Debug.Log($"[REKKR] voxel {kv.Key} = {kv.Value.File} {model.SizeX}x{model.SizeY}x{model.SizeZ} tris={em.Indices.Length / 3}");
+                    }
+                }
+                catch (Exception ex) { Debug.LogWarning($"[REKKR] voxel {kv.Key}: {ex.Message}"); }
+            }
+            Debug.Log($"[REKKR] voxels.txt loaded: {voxelMap.Entries.Count} mappings, {voxelMeshes.Count} models");
+        }
+
+        private static Mesh ToMesh(ExtrudedMesh r, string name)
+        {
+            var m = new Mesh { name = name };
+            m.SetVertexBufferParams(r.Vertices.Length, Layout);
+            m.SetVertexBufferData(r.Vertices, 0, 0, r.Vertices.Length);
+            m.SetIndexBufferParams(r.Indices.Length, IndexFormat.UInt32);
+            m.SetIndexBufferData(r.Indices, 0, 0, r.Indices.Length);
+            m.subMeshCount = 1;
+            m.SetSubMesh(0, new SubMeshDescriptor(0, r.Indices.Length));
+            m.RecalculateBounds();
+            return m;
+        }
+
+        private bool TryVoxel(Mobj mo, float x, float y, float z)
+        {
+            if (voxelMap.Entries.Count == 0) return false;
+            var key = spriteNames[(int)mo.Sprite] + (char)('A' + (mo.Frame & 0x7FFF));
+            if (!voxelMap.Entries.TryGetValue(key, out var e) || !voxelMeshes.TryGetValue(e.File, out var mesh) || mesh == null) return false;
+            var a = (float)(mo.Angle.Data * (Math.PI * 2 / 4294967296.0)) + (e.Angle + e.Spin * Time.time) * Mathf.Deg2Rad;
+            float ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+            // model front (-z) faces the thing's direction: mesh z = -facing, x = right of the facing
+            var m = Matrix4x4.identity;
+            m.SetColumn(0, new Vector4(sa, 0, -ca, 0) * e.Scale);
+            m.SetColumn(1, new Vector4(0, 1, 0, 0) * e.Scale);
+            m.SetColumn(2, new Vector4(-ca, 0, -sa, 0) * e.Scale);
+            m.SetColumn(3, new Vector4(x, z, y, 1));
+            instances.Add((mesh, m, mo.Subsector.Sector.Number, (mo.Frame & 0x8000) != 0 ? 1F : 0F));
+            return true;
+        }
+
+        private bool ReplaceThing(Mobj mo, Patch patch, bool flip, float x, float y, float bottom)
+        {
+            if ((mo.Flags & MobjFlags.Shadow) != 0) return false;      // spectres keep the fuzz billboard
+            if (TryVoxel(mo, x, y, mo.GetInterpolatedZ(curFrac).ToFloat())) return true;
+            if (RekkrSettings.RemasterThings != 1) return false;
+            var slot = atlas.SpriteSlot(patch);
+            if (slot < 0) return false;
+            var key = (patch, flip, DepthClass(mo));
+            if (!extruded.TryGetValue(key, out var e))
+            {
+                if (pendingBuilds > 64) return false;
+                e = new Extruded();
+                var depth = key.Item3 / 10F;
+                e.Task = System.Threading.Tasks.Task.Run(() => SpriteExtruder.Build(patch, slot, flip, depth));
+                pendingBuilds++;
+                extruded[key] = e;
+            }
+            e.LastUse = frameNo;
+            if (e.Mesh == null) return false;                          // billboard until the mesh is ready
+            // camera-plane aligned like the billboard: mesh x = camera right, z = away from the camera
+            var m = Matrix4x4.identity;
+            m.SetColumn(0, new Vector4(instSa, 0, -instCa, 0));
+            m.SetColumn(1, new Vector4(0, 1, 0, 0));
+            m.SetColumn(2, new Vector4(instCa, 0, instSa, 0));
+            m.SetColumn(3, new Vector4(x, bottom, y, 1));
+            instances.Add((e.Mesh, m, mo.Subsector.Sector.Number, (mo.Frame & 0x8000) != 0 ? 1F : 0F));
+            return true;
+        }
+
+        private int DrawExtruded(int pass, MaterialPropertyBlock casterBlock)
+        {
+            foreach (var (mesh, m, sector, bright) in instances)
+            {
+                instBlock.Clear();
+                instBlock.SetVector("_Inst", new Vector4(sector, bright, 0, 0));
+                if (casterBlock != null) instBlock.SetVector("_SunCasterMask", new Vector4(1, 0, 0, 0));
+                cmd.DrawMesh(mesh, m, worldMat, 0, pass, instBlock);
+            }
+            return instances.Count;
         }
 
         private void EnsureTargets(UnityVideo video, ThreeDRenderer.ViewInfo v)
@@ -350,7 +530,7 @@ namespace ManagedDoom.UnityPort
             var secs = world.Map.Sectors;
             for (var i = 0; i < secs.Length; i++)
             {
-                var l = secs[i].LightLevel;
+                var l = Math.Max(secs[i].LightLevel, ThreeDRenderer.MinSectorLight);   // dev6 "dark areas" floor
                 var outdoor = secs[i].CeilingFlat == content.Flats.SkyFlatNumber;
                 sectorPixels[i] = new Color32((byte)Mathf.Clamp(l, 0, 255), outdoor ? (byte)255 : (byte)0, 0, 255);
             }

@@ -18,15 +18,29 @@ public sealed partial class RekkrApp
     private void ShotFrame(string name, Texture src = null)
     {
         if (string.IsNullOrEmpty(shotDir) || video == null) return;
+        try
+        {
+            var mo = Doom.Game.World.ConsolePlayer.Mobj;   // where the shot was taken (REKKR_PARITY re-shoots it)
+            Log($"shot {name} E{Doom.Game.Options.Episode}M{Doom.Game.Options.Map} at=({mo.X.ToFloat():F0},{mo.Y.ToFloat():F0}) angle={mo.Angle.Data / 4294967296.0 * 360.0:F0}");
+        }
+        catch (Exception) { }
         src ??= lastShownFrame != null ? lastShownFrame : video.FrameTexture;
         int tw = src.width, th = src.height;   // transposed: tw = frame height, th = frame width
-        var rt = RenderTexture.GetTemporary(tw, th, 0, RenderTextureFormat.ARGB32);
-        Graphics.Blit(src, rt);
-        var prev = RenderTexture.active; RenderTexture.active = rt;
-        var tex = new Texture2D(tw, th, TextureFormat.RGBA32, false);
-        tex.ReadPixels(new Rect(0, 0, tw, th), 0, 0); tex.Apply();
-        RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rt);
-        var p = tex.GetPixels32();
+        Color32[] p;
+        Texture2D tex = null;
+        if (src is Texture2D cpu) p = cpu.GetPixels32();   // the software frame: exact CPU bytes
+        else
+        {
+            // read a RenderTexture directly (a Blit through the default shader may filter the G-buffer codes)
+            var direct = src as RenderTexture;
+            var rt = direct != null ? direct : RenderTexture.GetTemporary(tw, th, 0, RenderTextureFormat.ARGB32);
+            if (direct == null) Graphics.Blit(src, rt);
+            var prev = RenderTexture.active; RenderTexture.active = rt;
+            tex = new Texture2D(tw, th, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, tw, th), 0, 0); tex.Apply();
+            RenderTexture.active = prev; if (direct == null) RenderTexture.ReleaseTemporary(rt);
+            p = tex.GetPixels32();
+        }
         int W = th, H = tw;
         var outTex = new Texture2D(W, H, TextureFormat.RGB24, false);
         var o = new Color32[W * H];
@@ -38,7 +52,15 @@ public sealed partial class RekkrApp
             }
         outTex.SetPixels32(o); outTex.Apply();
         File.WriteAllBytes(Path.Combine(shotDir, $"s{testScenario}_{name}.png"), outTex.EncodeToPNG());
-        Destroy(tex); Destroy(outTex);
+        if (Environment.GetEnvironmentVariable("REKKR_SHOT_ALPHA") == "1")   // debug: G-buffer codes as grey
+        {
+            for (var x = 0; x < W; x++)
+                for (var y = 0; y < H; y++) { var a = p[x * tw + y].a; o[(H - 1 - y) * W + x] = new Color32(a, a, a, 255); }
+            outTex.SetPixels32(o); outTex.Apply();
+            File.WriteAllBytes(Path.Combine(shotDir, $"s{testScenario}_{name}_alpha.png"), outTex.EncodeToPNG());
+        }
+        if (tex != null) Destroy(tex);
+        Destroy(outTex);
     }
 
     private Texture lastShownFrame;
@@ -84,15 +106,23 @@ public sealed partial class RekkrApp
             }
             mo.Angle = new Angle((uint)(ang / 360.0 * 4294967296.0));
             pl.ViewZ = mo.Z + Player.NormalViewHeight;
+            mo.DisableFrameInterpolationForOneFrame();   // frozen world: frameFrac 0 would render the old spot
+            pl.DisableFrameInterpolationForOneFrame();
             input.SetPitch(pitch);
             freezeWorld = true;
             yield return null; yield return null;
             RekkrSettings.Remaster = false;
             yield return null; yield return null; yield return null;
             ShotFrame($"par{k:D2}_E{e}M{m}_a{ang:F0}_p{pitch:F0}_sw");
+            if (Environment.GetEnvironmentVariable("REKKR_SHOT_ALPHA") == "1") ShotFrame($"par{k:D2}_swsoft", video.Texture);
             RekkrSettings.Remaster = true;
             yield return null; yield return null; yield return null;
             ShotFrame($"par{k:D2}_E{e}M{m}_a{ang:F0}_p{pitch:F0}_gpu");
+            if (Environment.GetEnvironmentVariable("REKKR_SHOT_ALPHA") == "1")
+            {
+                ShotFrame($"par{k:D2}_comp", video.FrameTexture);
+                ShotFrame($"par{k:D2}_soft", video.Texture);
+            }
             Log($"parity {k} E{e}M{m} at=({mo.X.ToFloat():F0},{mo.Y.ToFloat():F0}) angle={ang} pitch={pitch} tris={gpu?.Triangles} things={gpu?.ThingCount} calls={gpu?.DrawCalls} gpu_cpu_ms={gpu?.LastCpuMs:F2}");
             freezeWorld = false;
             k++;
@@ -119,7 +149,7 @@ public sealed partial class RekkrApp
             Doom.NewGame(GameSkill.Easy, ep, 1);
             yield return Wait(1.5F);
             var ft = new List<float>(6000);
-            var evs = new (float, Action, string)[] { (5F, () => ShotFrame($"rm_e{ep}_a"), $"rm_e{ep}_a_screen"), (11F, () => input.AutoPitch = 30F, null), (12.2F, () => { input.AutoPitch = 0; ShotFrame($"rm_e{ep}_up"); }, null), (13F, () => input.CenterView(), null), (19F, () => ShotFrame($"rm_e{ep}_b"), null) };
+            var evs = new (float, Action, string)[] { (5F, () => { ShotFrame($"rm_e{ep}_a"); if (Environment.GetEnvironmentVariable("REKKR_SHOT_ALPHA") == "1") { ShotFrame($"rm_e{ep}_a_comp", video.FrameTexture); ShotFrame($"rm_e{ep}_a_soft", video.Texture); } }, $"rm_e{ep}_a_screen"), (11F, () => input.AutoPitch = 30F, null), (12.2F, () => { input.AutoPitch = 0; ShotFrame($"rm_e{ep}_up"); }, null), (13F, () => input.CenterView(), null), (19F, () => ShotFrame($"rm_e{ep}_b"), null) };
             var play = Play(24F, evs);
             while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
             float sum = 0; foreach (var f in ft) sum += f;

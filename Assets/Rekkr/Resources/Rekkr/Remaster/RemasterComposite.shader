@@ -17,16 +17,16 @@ Shader "Rekkr/Remaster/RemasterComposite"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment frag
-            #pragma target 3.0
+            #pragma target 3.5
             #include "UnityCG.cginc"
-            sampler2D _MainTex;
+            Texture2D _MainTex;   // dev6 fix: exact texel loads (a bilinear "centre" sample blended HUD/weapon edges)
             sampler2D _GpuTex;
             float4 _Win;     // window x, y, w, h (frame px)
             float4 _Frame;   // W, H, 1/W, 1/H
             float4 frag(v2f_img i) : SV_Target
             {
                 float x = floor(i.uv.y * _Frame.x), y = floor(i.uv.x * _Frame.y);
-                float4 s = tex2Dlod(_MainTex, float4((y + 0.5) * _Frame.w, (x + 0.5) * _Frame.z, 0, 0));
+                float4 s = _MainTex.Load(int3(clamp((int)y, 0, (int)_Frame.y - 1), clamp((int)x, 0, (int)_Frame.x - 1), 0));
                 int code = (int)(s.a * 255.0 + 0.5);
                 if (code != 250 && code != 251) return s;
                 float wx = x - _Win.x, wy = y - _Win.y;
