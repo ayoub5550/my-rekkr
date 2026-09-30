@@ -518,8 +518,9 @@ public sealed partial class RekkrApp
         else if (gfxPage == 3)
         {
             // dev6: renderer (software original / Remaster GPU 3D) + its options, dark areas
-            if (Cycle(Loc.T("renderer"), Loc.T(RekkrSettings.Remaster ? "renderer_gpu" : "renderer_sw"))) RekkrSettings.Remaster = !RekkrSettings.Remaster;
-            if (RekkrSettings.Remaster)
+            if (!RekkrSettings.RemasterAllowed) { rowY += rowH * 0.45F; Hint(Loc.T("renderer_weak")); rowY += rowH * 0.25F; }   // weak GPU: original renderer only
+            else if (Cycle(Loc.T("renderer"), Loc.T(RekkrSettings.Remaster ? "renderer_gpu" : "renderer_sw"))) RekkrSettings.Remaster = !RekkrSettings.Remaster;
+            if (RekkrSettings.Remaster && RekkrSettings.RemasterAllowed)
             {
                 if (Cycle(Loc.T("rm_things"), Loc.T("rm_things_" + RekkrSettings.RemasterThings))) RekkrSettings.RemasterThings = (RekkrSettings.RemasterThings + 1) % 2;
                 var sh = Toggle(Loc.T("rm_shadows"), RekkrSettings.RemasterShadows);

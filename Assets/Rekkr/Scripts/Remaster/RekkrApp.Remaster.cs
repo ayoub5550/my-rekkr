@@ -136,9 +136,11 @@ public sealed partial class RekkrApp
     private IEnumerator Scenario6()
     {
         HudMode = 1;
-        ApplyPreset(3);
-        RekkrSettings.Remaster = true;
-        Log($"remaster tour preset={RekkrSettings.GfxPreset} remaster={RekkrSettings.Remaster}");
+        // weak GPU: Remaster is hidden, so tour the maps at the automatic preset with the original renderer
+        var allowed = RekkrSettings.RemasterAllowed;
+        ApplyPreset(allowed ? 3 : ManagedDoom.UnityPort.DeviceClass.AutoPreset(SystemInfo.processorCount, false));
+        RekkrSettings.Remaster = allowed;
+        Log($"remaster tour preset={RekkrSettings.GfxPreset} remaster={RekkrSettings.Remaster} allowed={allowed}");
         // title demo (DEMO1) drawn by the GPU
         yield return Wait(9F); ShotFrame("rm_demo_a"); Shot("rm_demo_a_screen");
         yield return Wait(6F); ShotFrame("rm_demo_b");
@@ -154,10 +156,14 @@ public sealed partial class RekkrApp
             while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
             float sum = 0; foreach (var f in ft) sum += f;
             ft.Sort();
-            Log($"remaster E{ep}M1 avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} lines={video.Lines} tris={gpu?.Triangles} things={gpu?.ThingCount} calls={gpu?.DrawCalls} gpu_cpu_ms={gpu?.LastCpuMs:F2}");
+            Log($"{(allowed ? "remaster" : "software")} E{ep}M1 avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} lines={video.Lines} tris={gpu?.Triangles} things={gpu?.ThingCount} calls={gpu?.DrawCalls} gpu_cpu_ms={gpu?.LastCpuMs:F2}");
         }
-        foreach (var rem in new[] { false, true })
+        // weak GPU: software at the auto preset, then Balanced and Classic (picks the weak-device default)
+        var autoP = RekkrSettings.GfxPreset;
+        var runs = allowed ? new[] { (false, 3), (true, 3) } : new[] { (false, autoP), (false, 1), (false, 0) };
+        foreach (var (rem, preset) in runs)
         {
+            if (preset != RekkrSettings.GfxPreset) ApplyPreset(preset);
             RekkrSettings.Remaster = rem;
             Doom.NewGame(GameSkill.Easy, 1, 1);
             yield return Play(2F, null);
@@ -166,7 +172,7 @@ public sealed partial class RekkrApp
             while (play.MoveNext()) { yield return play.Current; ft.Add(Time.unscaledDeltaTime); }
             float sum = 0; foreach (var f in ft) sum += f;
             ft.Sort();
-            Log($"compare renderer={(rem ? "remaster" : "software")} avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} lines={video.Lines}");
+            Log($"compare renderer={(rem ? "remaster" : "software")} preset={RekkrSettings.GfxPreset} avg_fps={ft.Count / Mathf.Max(0.001F, sum):F1} p99_frame_ms={ft[(int)(ft.Count * 0.99F)] * 1000:F1} lines={video.Lines}");
         }
         HudMode = 0;
     }

@@ -10,7 +10,11 @@ namespace ManagedDoom.UnityPort
     {
         /// <summary>True for GPUs that ran Masterpiece at the frame-rate target on device tests (Adreno ≥ 640,
         /// Mali-G7x / G710+ / G610+ / Immortalis, Xclipse, PowerVR not included) and for every non-mobile GPU.</summary>
-        public static bool StrongGpu => IsStrong(SystemInfo.graphicsDeviceName, Application.isMobilePlatform);
+        public static bool StrongGpu => forced ?? IsStrong(SystemInfo.graphicsDeviceName, Application.isMobilePlatform);
+
+        // Test only: REKKR_GPU_CLASS=weak|strong overrides the detection (Linux player checks of the weak path).
+        private static readonly bool? forced = System.Environment.GetEnvironmentVariable("REKKR_GPU_CLASS") switch
+        { "weak" => false, "strong" => true, _ => (bool?)null };
 
         public static bool IsStrong(string gpu, bool mobile)
         {

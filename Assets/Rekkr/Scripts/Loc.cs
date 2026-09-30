@@ -42,6 +42,7 @@ namespace ManagedDoom.UnityPort
             ["renderer"] = ("3D renderer", "محرك العرض ثلاثي الأبعاد"),
             ["renderer_sw"] = ("ORIGINAL", "الأصلي"),
             ["renderer_gpu"] = ("REMASTER (GPU 3D)", "ريماستر (3D على كرت الشاشة)"),
+            ["renderer_weak"] = ("Remaster (GPU 3D) needs a stronger GPU; this phone uses the original renderer.", "ريماستر (3D) يحتاج كرت شاشة أقوى؛ هذا الهاتف يستعمل محرك العرض الأصلي."),
             ["rm_things"] = ("Monsters and items", "الوحوش والأغراض"),
             ["rm_things_0"] = ("FLAT (ORIGINAL)", "مسطحة (الأصل)"),
             ["rm_things_1"] = ("3D VOXEL", "مجسمة (فوكسل)"),

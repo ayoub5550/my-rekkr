@@ -297,7 +297,7 @@ public sealed partial class RekkrApp : MonoBehaviour
             video.LocalViewPitch = RekkrSettings.FreeLook && InLevel ? input.PitchInt : 0;
             // dev6 Remaster: the GPU draws the 3D world of the level on screen (game, demo, title demo);
             // the software renderer still draws the 2D (HUD, menus, weapon) and wipes.
-            var levelGame = RekkrSettings.Remaster && !Doom.Wiping ? GpuRenderer.LevelGame(Doom) : null;
+            var levelGame = RekkrSettings.Remaster && RekkrSettings.RemasterAllowed && !Doom.Wiping ? GpuRenderer.LevelGame(Doom) : null;
             ThreeDRenderer.TrueColor = RekkrSettings.SmoothLighting || levelGame != null;
             ThreeDRenderer.WorldPassOff = levelGame != null;
             video.Render(Doom, Fixed.FromFloat(Mathf.Clamp01(frac)));

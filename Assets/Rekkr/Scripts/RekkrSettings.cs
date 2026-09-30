@@ -55,6 +55,9 @@ namespace ManagedDoom.UnityPort
         public static bool Particles;            // sparks, blood drops, splashes, embers
         public static bool DoF;                  // depth of field (far blur)
         public static bool Remaster;             // dev6: GPU 3D renderer ("Remaster") instead of the software 3D view
+        /// <summary>dev6: Remaster is offered only on strong GPUs. Test Lab Galaxy A15 (Mali-G57 MC2) ran it at
+        /// 19–28 fps (gate ≥ 45), so weak GPUs keep the original renderer and the option is hidden.</summary>
+        public static bool RemasterAllowed => ManagedDoom.UnityPort.DeviceClass.StrongGpu;
         public static int RemasterThings = 1;    // dev6: 0 flat billboards (original sprites), 1 extruded 3D voxel sprites
         public static bool RemasterShadows = true; // dev6: sun shadow map in outdoor areas
         public static int DarkAreas = 1;         // dev6: 0 original sector light, 1 lifted, 2 bright (E3 has many light-0 rooms)
@@ -151,7 +154,7 @@ namespace ManagedDoom.UnityPort
             AO = PlayerPrefs.GetInt("fx_ao", 0) == 1;
             Particles = PlayerPrefs.GetInt("fx_particles", 0) == 1;
             DoF = PlayerPrefs.GetInt("fx_dof", 0) == 1;
-            Remaster = PlayerPrefs.GetInt("gfx_remaster", 0) == 1;
+            Remaster = RemasterAllowed && PlayerPrefs.GetInt("gfx_remaster", 0) == 1;
             RemasterThings = Mathf.Clamp(PlayerPrefs.GetInt("rm_things", 1), 0, 1);
             RemasterShadows = PlayerPrefs.GetInt("rm_shadows", 1) == 1;
             DarkAreas = Mathf.Clamp(PlayerPrefs.GetInt("gfx_dark", 1), 0, 2);

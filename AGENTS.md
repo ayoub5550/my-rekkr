@@ -66,6 +66,8 @@ v0.1.0 checkpoint:
   KVX loader, sun shadow map, dev5 effects on the GPU G-buffer), setting **Dark areas** (Original / Lifted / Bright),
   GPU-class auto preset (`DeviceClass`), fixes for the weapon/HUD outline, water ripples on the weapon, light blow-out,
   DoF halo and sun glare on walls. **New keystore** (cert SHA-256 `768de491…bab8`): uninstall ≤ 0.5.0 once.
+  Remaster is offered only on strong GPUs (`RekkrSettings.RemasterAllowed`; Mali-G57 ran it at 19–28 fps).
+  Test Lab r8q Remaster 84–103 fps; a15 (weak) 22–38 fps in software, same as v0.5.0 (≥ 55 gate open).
   Details and honest stage status: `docs/DEV6.md` §6/§9.
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
@@ -154,7 +156,7 @@ The same setup is used for my-librequake (its §9).
   - NDK / build-tools / platform-tools symlinks can be extracted as small text files ("clang: not found").
     Re-create every file whose content is just a relative path as a real symlink.
   - Unity 2022 desktop player: `-logFile` is relative to the player's cwd — pass absolute paths.
-- **dev6 test scenarios:** `6` (Remaster tour E1M1–E4M1 + software vs Remaster fps), `7` (parity: warp + freeze,
+- **dev6 test scenarios:** `6` (Remaster tour E1M1–E4M1 + software vs Remaster fps; on a weak GPU: software tour + presets auto/1/0; `REKKR_GPU_CLASS=weak|strong` forces the class), `7` (parity: warp + freeze,
   software vs Remaster shot of the same view; `REKKR_PARITY="e,m,x,y,angle,pitch;…"`, `REKKR_SHOT_ALPHA=1` also
   dumps the G-buffer alpha). Frame textures must be read with exact texel loads, never bilinear
   (bilinear mixes G-buffer codes → outlines).
