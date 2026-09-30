@@ -66,7 +66,7 @@ keeping the game classic". 15:03 UTC: "the buttons are fine as they are; the res
 | 4 | World: floating + glowing pickups, monster hit flash, impact chips/dust, richer blood, explosion smoke/embers/debris | ✅ 2026-09-30 | shots, no errors |
 | 5 | UI: panel + wheel transitions, HUD pops (touch buttons untouched) | ✅ 2026-09-30 | shots |
 | 6 | Tests: scenario 12 (smoothness metric Classic vs Modern, events, explosion, fight, liquid frames); HeadlessTest golden | ✅ 2026-09-30 HeadlessTest golden 176 frames identical, RESULT PASS | PASS |
-| 7 | Android 0.8.0 build, Test Lab r8q (1, 11, 12), video; release on the owner's OK | 🚧 (Next: Test Lab results) | Passed, 0 `E Unity`, fps ≈ dev7 |
+| 7 | Android 0.8.0 build, Test Lab r8q (1, 11, 12), video; release on the owner's OK | 🚧 (Next: physical r8q run — the Spark quota of 5 physical runs/day was used up on 2026-09-30; virtual MediumPhone.arm/33 run of scenarios 12, 1, 11: Passed, 0 `E Unity`, 36/36 maps errors=0, anim8 still_pct 56.1 → 0.0, recoil fires=3, explosion particles=60; Remaster not available on the emulator, fps meaningless ≈ 8–10) | Passed, 0 `E Unity`, fps ≈ dev7 |
 
 Legend: ⬜ not started · 🚧 in progress (Next: …) · ✅ done · ⏭ deferred (reason).
 
