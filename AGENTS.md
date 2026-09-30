@@ -78,6 +78,8 @@ v0.1.0 checkpoint:
 
 - v0.7.0 (dev7), merged into `main`: see the note at the top and `docs/DEV7.md` §3/§4. Same keystore as 0.6.0 (installs
   over it). Gamepad and the document picker are **not tested on hardware** (no pad / no person on Test Lab).
+  r8q: classic ≈ 99–103 fps; Remaster all-maps 73.7 fps at thermal 3, 54.8 fps at thermal 4 (E1M7/E4M9/E2M7 the
+  heaviest, 43–50 fps when hot). Point-light shadows follow `GpuRenderer.ShadowTriBudget` (240k / level tris).
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.
