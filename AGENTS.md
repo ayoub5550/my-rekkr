@@ -1,6 +1,6 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-30 (v0.8.0, dev8).
+Last updated: 2026-10-01 (v0.8.1 fix, dev8).
 
 > **dev8 (v0.8.0) — merged into `main`** (owner approval 2026-09-30): the animation layer, "modern but still classic",
 > all **visual only** (HeadlessTest golden PASS). New settings tab **ANIMATION** (Classic = original / Modern = default /
@@ -8,7 +8,7 @@ Last updated: 2026-09-30 (v0.8.0, dev8).
 > switch, camera shake + hit kick + damage-direction marks, strafe lean (Remaster only, off), floating / glowing pickups,
 > monster hit flash, impact chips / dust, richer blood, explosion smoke / embers / debris, liquid cross-fade, panel /
 > wheel / HUD-number transitions. **Touch buttons are not animated (owner decision).** New test scenario 12. Plan,
-> settings table, code map and measurements: [`docs/DEV8.md`](docs/DEV8.md). Open item: physical r8q Test Lab run.
+> settings table, code map and measurements: [`docs/DEV8.md`](docs/DEV8.md). Physical r8q run passed (0.8.0; wipe-resize bug fixed in 0.8.1, see DEV8 §6/§8).
 >
 > **dev7 (v0.7.0) — the first release merged into `main`** (owner approval 2026-09-30): fixes for the owner's 0.6.0
 > reports (settings not applied on demos / smooth lighting in Remaster, far too strong dynamic lights, bad fog and
@@ -92,7 +92,9 @@ v0.1.0 checkpoint:
 - v0.8.0 (dev8), merged into `main`: animation layer (see the top note and `docs/DEV8.md` §5–§7). APK 101,797,141 B,
   versionCode 8, same keystore. Linux scenario 12: weapon "still" frames while walking 54.5 % → 0 % (software), 43.5 % → 0 %
   (Remaster). Test Lab virtual MediumPhone.arm/33 (S12, S1, S11): Passed, 0 `E Unity`, 36/36 maps errors=0.
-  **Physical r8q run not done yet** (Spark quota used up on release day).
+  Physical r8q (2026-10-01): Passed; classic 96.3 fps, Remaster all-maps 55.6 fps at thermal 4. One `RenderWipe`
+  IndexOutOfRange after the 4:3/wide toggle during a wipe → fixed in **0.8.1** (versionCode 9, branch `feat/dev8`;
+  retest Passed, 0 `E Unity`; classic 101.2 fps). 0.8.1 is not in `main` until the owner approves.
 
 **Not verified:** a full campaign playthrough by a human; audible audio QA. The sandbox has no sound
   card, and Test Lab videos have no audio.

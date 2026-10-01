@@ -480,6 +480,12 @@ namespace ManagedDoom
 
         private void StartWipe()
         {
+            // my-rekkr 0.8.1: ResetWipe is skipped while a wipe runs, so a frame resize during a wipe
+            // left a wipe sized for the old frame; rebuild it here so the next wipe matches.
+            if (wipeEffect.Y.Length != video.WipeBandCount)
+            {
+                wipeEffect = new WipeEffect(video.WipeBandCount, video.WipeHeight);
+            }
             wipeEffect.Start();
             video.InitializeWipe();
             wiping = true;

@@ -345,7 +345,15 @@ namespace ManagedDoom.Video
 
             var wipe = doom.WipeEffect;
             var scale = screen.Height / 200;
-            for (var i = 0; i < wipeBandCount - 1; i++)
+            // my-rekkr 0.8.1: the frame can be rebuilt mid-wipe (4:3 <-> wide toggle, dynres). The wipe
+            // columns and the saved old frame then no longer match this screen: show the new frame instead
+            // of indexing past wipe.Y / wipeBuffer (IndexOutOfRangeException seen on r8q, 2026-10-01).
+            var bands = wipeBandCount - 1;
+            if (wipe.Y.Length < wipeBandCount || wipeBuffer.Length != screen.Data.Length)
+            {
+                bands = 0;
+            }
+            for (var i = 0; i < bands; i++)
             {
                 var x1 = wipeBandWidth * i;
                 var x2 = x1 + wipeBandWidth;

@@ -150,7 +150,8 @@ The style is not stored: `RekkrSettings.MatchAnimStyle()` derives it from the 14
 | HeadlessTest (engine parity) | golden 176 frames identical, DEMO1–4, RESULT PASS |
 | Linux scenario 12 (llvmpipe) | weapon "still" frames while walking: software 54.5 % → 0 %, Remaster 43.5 % → 0 %; recoil fires=2; barrel shake 0.48; errors=0 |
 | Test Lab virtual MediumPhone.arm/33, scenarios 12, 1, 11 (2026-09-30) | **Passed**, 0 `E Unity`, 0 FATAL. S12: still 56.1 % → 0.0 %, recoil fires=3, explosion particles=60, liquid E1M1 sector 2 flat 148, errors=0. S1: menus, autosave, quicksave/quickload, look ±75°, jumps=6, haptics=65. S11: 36/36 maps errors=0 (software; Remaster is not available on the emulator). fps ≈ 8–10 (emulator, not meaningful) |
-| Test Lab physical r8q/33 | **not run yet**: the Spark quota (5 physical runs/day) was used up on 2026-09-30. Next: `OUT=… SCENARIOS=1,11,12 FTL_TIMEOUT=30m tools/sandbox/ftl_gameloop.sh Builds/REKKR-0.8.0.apk` and compare with dev7 (classic 99–103 fps; Remaster all-maps 73.7 fps at thermal 3) |
+| Test Lab physical r8q/33, 0.8.0, scenarios 1, 11, 12 (2026-10-01, matrix-eamh449u6huxa) | **Passed**, 0 FATAL. S1: avg_fps 96.3, p99 25.4 ms, thermal 4, dynres 600→400 (1 switch), jumps=6, haptics=43, autosave/quicksave/quickload OK. S11 (Remaster): 36/36 maps errors=0, avg_fps 55.6 at thermal 4 (dev7: 54.8 at thermal 4); lowest E1M7 36.2, E4M9 45.6. S12: still frames software 74.3 % → 0.4 %, Remaster 74.4 % → 0.4 %, recoil fires=2, explosion particles 31/35, liquid flat 148, errors=0. **One bug**: 6 `E Unity` lines = one `IndexOutOfRangeException` in `Renderer.RenderWipe` after the 4:3 → wide toggle during a screen wipe (fixed in 0.8.1) |
+| Test Lab physical r8q/33, 0.8.1, scenarios 1, 12 (2026-10-01) | **Passed**, 0 `E Unity`, 0 FATAL, no `RenderWipe` error. S1: avg_fps 101.2, p99 25.0 ms, thermal 4, jumps=6. S12: errors=0, avg_fps 72.4, still 80.7 % → 1.7 % (software), 79.7 % → 2.5 % (Remaster) |
 
 APK `REKKR-0.8.0.apk`: 101,797,141 B, versionCode 8, versionName 0.8.0, minSdk 24, arm64-v8a + armeabi-v7a,
 cert SHA-256 `768de491…bab8` (installs over 0.6.0/0.7.0), sha256
@@ -158,7 +159,7 @@ cert SHA-256 `768de491…bab8` (installs over 0.6.0/0.7.0), sha256
 
 ## 7. Limits and not verified
 
-- Smoothness on a real phone at 120 Hz has not been judged by a human yet; physical Test Lab run pending (§6).
+- Smoothness on a real phone was judged good by the owner (played 0.8.0, 2026-09-30); physical Test Lab runs passed (§6).
 - Camera roll exists only in Remaster (the column renderer cannot roll) and is off by default.
 - In software, only flats cross-fade (walls do not); Remaster does both.
 - Impacts / blood / smoke need the Particles setting (hint shown on page 3).
@@ -171,3 +172,4 @@ cert SHA-256 `768de491…bab8` (installs over 0.6.0/0.7.0), sha256
 - 2026-09-30: a kill clears MF_SHOOTABLE on the same tic the health drops — track health once a thing was shootable.
 - 2026-09-30: when the physical quota is exhausted (`TEST_QUOTA_EXCEEDED`), a virtual `MediumPhone.arm` v33 run (separate quota) still catches crashes and errors.
 - 2026-09-30: owner approved the merge into `main` and the v0.8.0 release.
+- 2026-10-01: physical r8q run of 0.8.0 found `IndexOutOfRangeException` in `Renderer.RenderWipe`: `Doom.ResetWipe()` is skipped while a wipe runs, so after a frame resize (4:3 ↔ wide) `wipe.Y` has fewer bands than the renderer. Fix (0.8.1, versionCode 9): `StartWipe` recreates the wipe when the band count changed, `RenderWipe` clamps to the available bands. Retest Passed, 0 `E Unity`.
