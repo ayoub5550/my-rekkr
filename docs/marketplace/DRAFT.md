@@ -37,7 +37,12 @@ The `marketplace-submission` status is an archive label, not Codester approval.
 - Unity import/rebuild, physical-device, audio and controller QA were not
   performed for this packaging change; see `docs/buyer/VALIDATION.md`.
 - Demo URL points directly to the existing v0.8.0 release APK.
-- Development hours are left blank rather than invented.
+- Codester rejected the empty development-hours field. Entered 320 as a rough
+  engineering estimate for rebuilding the Android port with the existing engine
+  and assets, not as recorded labour. Working breakdown: 160 rendering/effects,
+  40 Android host/build, 60 controls/UI/localization/saves, 40 animation/audio/
+  input integration, 20 packaging/tests. This is not an estimate for recreating
+  all upstream engine code and artwork. The reviewer note states this scope.
 - Free-file and flash-sale promotions are not opted into.
 
 The live Codester outcome must be checked separately. These files do not prove
