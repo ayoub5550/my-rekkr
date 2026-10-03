@@ -1,6 +1,6 @@
 # my-rekkr — Unity Android project
 
-**Preparation / review edition based on v0.8.0. Not a marketplace release.**
+**Source project based on v0.8.0.**
 
 A Unity 2022.3 LTS Android project hosting the Managed Doom C# engine and
 REKKR v1.17 content. This package includes editable source, game data, project
@@ -43,7 +43,7 @@ prefab-based FPS kit: the simulation and content formats follow the Doom engine.
 | `Packages`, `ProjectSettings` | Unity project configuration |
 | `tools` | Build, content-generation and headless test tools |
 | `ThirdParty`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Upstream materials and notices |
-| `PACKAGE_MANIFEST.json` | File sizes and SHA-256 hashes for this review archive |
+| `PACKAGE_MANIFEST.json` | File sizes, SHA-256 hashes and archive edition |
 
 No signing keys, Unity installation, marketplace credentials, generated Unity
 cache, APK or AAB are included. Restore Unity packages and install the Android
@@ -51,9 +51,10 @@ toolchain separately. Python and .NET are optional for packaging/engine tests.
 
 ## Licensing and distribution
 
-This review archive does not replace or expand the existing licences.
-Read `LICENSE` and `THIRD_PARTY_NOTICES.md`. Any separately negotiated rights
-must be documented in the final distribution terms; this review edition does
-not assert that buyers receive a commercial asset sublicense. Keep upstream
-copyright notices. Do not describe this edition as a proprietary, unrestricted
-reskin template or as approved by Codester.
+Read [DISTRIBUTION.md](DISTRIBUTION.md), `LICENSE` and
+`THIRD_PARTY_NOTICES.md`. The seller offers the Android project relying on
+separate commercial permission; the original public upstream notices are
+retained. This is a mixed-licence source project, not a blanket proprietary
+relicensing of all components. Keep copyright notices and comply with the
+applicable GPL/source obligations. Do not assume the artwork can be resold
+standalone or used in unrelated projects.

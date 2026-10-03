@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Create a deterministic, review-only Unity source ZIP; never upload it.
+"""Create a deterministic Unity source ZIP; never upload it automatically.
 
 Standard library only. Run from any directory with --output outside the project.
+Default edition is review; --edition marketplace labels a submission archive.
+The edition flag is not a licence grant or marketplace approval.
 Copyright (c) 2026 Ayoub Teke
 SPDX-License-Identifier: GPL-2.0-or-later
 """
@@ -38,6 +40,7 @@ REQUIRED = {
     "Assets/StreamingAssets/GeneralUser-GS.sf2",
     "docs/buyer/README.md", "docs/buyer/BUILDING.md",
     "docs/buyer/CUSTOMIZING.md", "docs/buyer/VALIDATION.md",
+    "docs/buyer/DISTRIBUTION.md",
 }
 TOKEN_PATTERN = re.compile(
     rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
@@ -52,6 +55,18 @@ Start with [the English project guide](docs/buyer/README.md).
 Existing upstream notices and licences are retained. No new distribution
 rights are granted by this archive. No Unity installation, credentials,
 signing key, APK or AAB is included.
+
+See `PACKAGE_MANIFEST.json` for per-file SHA-256 hashes.
+"""
+MARKETPLACE_START_HERE = """# my-rekkr — Unity Android FPS source project
+
+Start with [the English project guide](docs/buyer/README.md).
+Read [distribution notes](docs/buyer/DISTRIBUTION.md) and
+[validation scope](docs/buyer/VALIDATION.md) before publishing a build.
+
+Based on v0.8.0. Source, project assets and build tools are included.
+No Unity installation, account credentials, signing key, APK or AAB is included.
+The original third-party notices are retained.
 
 See `PACKAGE_MANIFEST.json` for per-file SHA-256 hashes.
 """
@@ -112,15 +127,19 @@ def validate_data(rel, data):
                 raise ValueError("Clear signing fields before packaging: " + m[1])
 
 
-def write_entry(archive, name, data, executable=False):
-    info = zipfile.ZipInfo("MyRekkrReview/" + name, date_time=(1980, 1, 1, 0, 0, 0))
+def write_entry(archive, name, data, executable=False, prefix="MyRekkrReview/"):
+    info = zipfile.ZipInfo(prefix + name, date_time=(1980, 1, 1, 0, 0, 0))
     info.create_system = 3
     info.external_attr = (0o100755 if executable else 0o100644) << 16
     info.compress_type = zipfile.ZIP_DEFLATED
     archive.writestr(info, data)
 
 
-def build_package(root, output):
+def build_package(root, output, edition="review"):
+    if edition not in {"review", "marketplace"}:
+        raise ValueError("Unknown package edition")
+    prefix = "MyRekkr/" if edition == "marketplace" else "MyRekkrReview/"
+    status = "marketplace-submission" if edition == "marketplace" else "review-only"
     root, output = root.resolve(), output.resolve()
     if output == root or root in output.parents:
         raise ValueError("Output must be outside the source project")
@@ -130,7 +149,7 @@ def build_package(root, output):
         raise ValueError("Output already exists; choose a new filename")
     files = project_files(root)
     output.parent.mkdir(parents=True, exist_ok=True)
-    manifest = {"status": "review-only", "files": []}
+    manifest = {"status": status, "files": []}
     fd, temporary = tempfile.mkstemp(suffix=".zip", dir=output.parent)
     os.close(fd)
     try:
@@ -140,19 +159,20 @@ def build_package(root, output):
                 data = (root / rel).read_bytes()
                 validate_data(rel, data)
                 write_entry(archive, rel.as_posix(), data,
-                            rel.suffix.lower() in {".sh", ".py"})
+                            rel.suffix.lower() in {".sh", ".py"}, prefix=prefix)
                 manifest["files"].append({
                     "path": rel.as_posix(), "bytes": len(data),
                     "sha256": hashlib.sha256(data).hexdigest(),
                 })
-            data = START_HERE.encode()
-            write_entry(archive, "README.md", data)
+            data = (MARKETPLACE_START_HERE if edition == "marketplace" else START_HERE).encode()
+            write_entry(archive, "README.md", data, prefix=prefix)
             manifest["files"].append({
                 "path": "README.md", "bytes": len(data),
                 "sha256": hashlib.sha256(data).hexdigest(),
             })
             write_entry(archive, "PACKAGE_MANIFEST.json",
-                        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode())
+                        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
+                        prefix=prefix)
         with zipfile.ZipFile(temporary) as archive:
             bad = archive.testzip()
             if bad:
@@ -162,7 +182,7 @@ def build_package(root, output):
         if os.path.exists(temporary):
             os.unlink(temporary)
     return {
-        "status": "review-only", "output": str(output),
+        "status": status, "output": str(output),
         "files": len(manifest["files"]),
         "bytes": output.stat().st_size,
         "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
@@ -172,9 +192,10 @@ def build_package(root, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--edition", choices=["review", "marketplace"], default="review")
     args = parser.parse_args()
     try:
-        result = build_package(ROOT, args.output)
+        result = build_package(ROOT, args.output, args.edition)
     except ValueError as error:
         parser.exit(1, f"Packaging refused: {error}\n")
     print(json.dumps(result, indent=2))

@@ -95,6 +95,21 @@ class ReviewPackageTests(unittest.TestCase):
             pack.build_package(self.root, output)
         self.assertEqual(output.read_bytes(), b"keep")
 
+    def test_marketplace_edition_and_retained_notices(self):
+        output = self.base / "market.zip"
+        result = pack.build_package(self.root, output, edition="marketplace")
+        self.assertEqual(result["status"], "marketplace-submission")
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.read("MyRekkr/LICENSE"), b"fixture\n")
+            self.assertEqual(archive.read("MyRekkr/THIRD_PARTY_NOTICES.md"), b"fixture\n")
+            manifest = json.loads(archive.read("MyRekkr/PACKAGE_MANIFEST.json"))
+            self.assertEqual(manifest["status"], "marketplace-submission")
+            self.assertIn(b"distribution notes", archive.read("MyRekkr/README.md"))
+
+    def test_unknown_edition_rejected(self):
+        with self.assertRaisesRegex(ValueError, "edition"):
+            pack.build_package(self.root, self.base / "bad.zip", edition="approved")
+
 
 if __name__ == "__main__":
     unittest.main()

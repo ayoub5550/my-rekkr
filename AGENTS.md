@@ -2,6 +2,14 @@
 
 Last updated: 2026-10-03 (v0.8.0, preparation tooling).
 
+> **Marketplace submission preparation:** the owner has authorized the commercial
+> Android submission. `tools/make_review_package.py --edition marketplace`
+> creates a submission-labelled archive; the default remains `review`.
+> Neither mode changes upstream notices or certifies marketplace approval.
+> Buyer terms/context are in `docs/buyer/DISTRIBUTION.md`; factual listing fields
+> are in `docs/marketplace/listing.json`. There are now 16 packaging/wrapper tests.
+> No new Unity build is implied by those tests.
+>
 > **Preparation tooling (not a marketplace release):** English technical guides
 > are in `docs/buyer/`, and the unpublished listing/checklist is in
 > `docs/marketplace/DRAFT.md`. `tools/make_review_package.py` creates a review-only
@@ -217,7 +225,9 @@ The same setup is used for my-librequake (its §9).
 - dev8: `RekkrWorld.shader` pass 6 = alpha-blended solid particles (added at the end, see the pass-order rule above).
 - dev8: interpolate the weapon only when the sprite is the same and the step ≤ 20 px, so state offsets are never smeared.
 - Do not use Freedoom as the IWAD. All content except the two patches stays 100 % REKKR.
-- No commercial packaging (CC BY-NC).
+- The original public REKKR licence is CC BY-NC. Commercial submission relies
+  on the seller's separate permission; do not remove upstream notices, invent
+  sublicensing scope, or describe GPL-covered source as proprietary.
 
 ## 7. Ideas for next versions
 

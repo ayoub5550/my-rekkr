@@ -38,7 +38,7 @@ The upstream release documentation records virtual Firebase Test Lab checks
 for scenarios 1, 11 and 12. The physical-device v0.8.0 run remains recorded as
 pending. Those are historical results, not rerun by this preparation change.
 
-## Required before a marketplace release
+## Remaining validation before your own app release
 
 - Clean Unity import and APK build from the extracted buyer ZIP.
 - Install/launch on at least one actual supported phone.
@@ -54,3 +54,7 @@ pending. Those are historical results, not rerun by this preparation change.
 
 Do not advertise "fully tested", "120 FPS guaranteed", "all phones supported",
 "complete human playthrough" or "Play Store ready" based on the engine tests.
+
+The marketplace package changes documentation and packaging, not gameplay.
+It has not been re-imported or rebuilt with Unity in the packaging environment.
+The demo APK is the existing v0.8.0 release, not a new build from this archive.
