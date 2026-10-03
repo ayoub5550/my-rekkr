@@ -36,7 +36,7 @@ Checked directly against https://www.codester.com/info/upload on 2026-10-03:
 
 - [ ] Final public product name and description.
 - [ ] Clean main ZIP including English buyer documentation.
-- [ ] 800 × 400 preview image.
+- [ ] 1600 × 800 preview image (upload form, 2026-10-03; the older guide still says 800 × 400).
 - [ ] 200 × 200 icon, not just a cropped screenshot.
 - [ ] Screenshot ZIP: 3–9 actual product images in PNG/JPG.
 - [ ] Demo URL without alternative purchase links.
