@@ -18,8 +18,8 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
   التالي/السابق، ركض، خريطة، قائمة. وفي القوائم تظهر أسهم وزر OK وزر BACK.
 * إعدادات اللمس (⚙): حساسية النظر، حجم الأزرار، شفافيتها، وضع اليد اليسرى، الركض الدائم.
 * رسم بدقة 640×400، و60 إطاراً في الثانية مع تنعيم الحركة، وحفظ تلقائي لاسم الـ save.
-* تُختبر كل نسخة على Firebase Test Lab على Galaxy S20 FE (Snapdragon 865 / Adreno 650، نفس
-  GPU هاتف POCO F3).
+* اختُبرت إصدارات سابقة على Firebase Test Lab على Galaxy S20 FE (Snapdragon 865 / Adreno 650،
+  نفس GPU هاتف POCO F3). الإصدار 0.8.0 اختُبر افتراضياً؛ اختباره على جهاز فعلي ما زال مسجلاً كمعلّق.
 * يدعم لوحة المفاتيح ويد التحكم (gamepad) أيضاً.
 
 ## الجديد في dev8 (0.8.0) — أنيميشن حديث بروح كلاسيكية
@@ -68,12 +68,16 @@ faithful Doom engine (Managed Doom, C#) — nothing is re-drawn or cut.
 
 ## Build
 
+English setup, customization and validation guides:
+[project guide](docs/buyer/README.md). Packaging material is a **review edition**,
+not a published marketplace release; existing licences remain unchanged.
+
 See [AGENTS.md](AGENTS.md) for the full toolchain (Unity 2022.3.62f3, Android SDK 36, NDK r23b,
 IL2CPP arm64-v8a + armeabi-v7a) and the Firebase Test Lab workflow.
 
 ```sh
 REKKR_KEYSTORE=... REKKR_KEYSTORE_PASS=... tools/sandbox/build_android.sh
-tools/sandbox/ftl_gameloop.sh Builds/REKKR-0.1.0.apk        # Galaxy S20 FE, Android 13
+tools/sandbox/ftl_gameloop.sh Builds/REKKR-0.8.0.apk        # Galaxy S20 FE, Android 13
 ```
 
 ## Licence

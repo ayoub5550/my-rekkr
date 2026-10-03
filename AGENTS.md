@@ -1,6 +1,18 @@
 # AGENTS.md — my-rekkr developer and agent handoff
 
-Last updated: 2026-09-30 (v0.8.0, dev8).
+Last updated: 2026-10-03 (v0.8.0, preparation tooling).
+
+> **Preparation tooling (not a marketplace release):** English technical guides
+> are in `docs/buyer/`, and the unpublished listing/checklist is in
+> `docs/marketplace/DRAFT.md`. `tools/make_review_package.py` creates a review-only
+> ZIP outside the checkout, retaining licences and rejecting common secret paths,
+> signing settings, symlinks and unresolved LFS pointers. No gameplay or licence
+> terms changed. `build_android.sh` now derives output/version-code defaults from
+> `RekkrApp.Version`, rather than hard-coding v0.1.0.
+> Run `python3 -m unittest discover -s tools/tests -v` (14 tests at this checkpoint).
+> On 2026-10-03 the .NET 10 full engine suite passed: 36 map-load checks, 36
+> soak/save-load checks and 176 golden frames. Unity/Android was not rebuilt for
+> this preparation change; do not describe the wrapper stub tests as a Unity build.
 
 > **dev8 (v0.8.0) — merged into `main`** (owner approval 2026-09-30): the animation layer, "modern but still classic",
 > all **visual only** (HeadlessTest golden PASS). New settings tab **ANIMATION** (Classic = original / Modern = default /
@@ -117,8 +129,8 @@ v0.1.0 checkpoint:
 ## 3. Build
 
 ```sh
-REKKR_KEYSTORE=/path/rekkr.keystore REKKR_KEYSTORE_PASS=... REKKR_VERSION_CODE=1 \
-  tools/sandbox/build_android.sh          # ~3–4 min incremental, Builds/REKKR-0.1.0.apk
+REKKR_KEYSTORE=/path/rekkr.keystore REKKR_KEYSTORE_PASS=... \
+  tools/sandbox/build_android.sh          # current version: Builds/REKKR-0.8.0.apk
 ```
 - Signing keystore: alias `rekkr`, certificate SHA-256 `768de491…bab8` since v0.6.0 (≤ 0.5.0: `58c71163…248a9d0`, lost). Keep the same keystore
   for every release, otherwise updates will not install over the old app.
