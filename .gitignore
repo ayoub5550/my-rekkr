@@ -16,3 +16,5 @@
 /*.sln
 .vs/
 /.worktrees/
+__pycache__/
+*.pyc
